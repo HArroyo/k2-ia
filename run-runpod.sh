@@ -8,10 +8,11 @@ echo "    INICIANDO DEMO IA K2 SEGURIDAD Y RESGUARDO EN RUNPOD (GPU)        "
 echo "======================================================================"
 
 # Matar procesos previos para liberar puertos
-pkill -f "python3 main.py" || true
-pkill -f "php -S 0.0.0.0:8000" || true
-pkill -f "node server.js" || true
-pkill -f "http.server 4200" || true
+pkill -9 -f "python3 main.py" || true
+pkill -9 -f "php -S 0.0.0.0:8000" || true
+pkill -9 -f "node server.js" || true
+pkill -9 -f "http.server" || true
+fuser -k 4200/tcp 8000/tcp 8001/tcp 3001/tcp || true
 
 # Actualizar paquetes básicos del sistema
 apt-get update -y

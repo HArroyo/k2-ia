@@ -53,15 +53,19 @@ import { AlertEvent, ApiService } from '../../services/api.service';
               <!-- Contenido de la Tarjeta con Snapshot Thumbnail -->
               <div class="flex space-x-2.5 items-center">
                 <!-- Thumbnail -->
-                <div class="w-16 h-12 bg-black rounded-lg overflow-hidden border border-gray-700 relative flex-shrink-0 flex items-center justify-center">
+                <div class="w-16 h-12 bg-k2-cardDark rounded-lg overflow-hidden border border-gray-700 relative flex-shrink-0 flex items-center justify-center">
                   @if (alert.snapshot_path) {
-                    <img [src]="getSnapshotUrl(alert.snapshot_path)" alt="Snapshot" class="w-full h-full object-cover" />
-                  } @else {
-                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
+                    <img [src]="getSnapshotUrl(alert.snapshot_path)" 
+                         (error)="$any($event.target).style.display='none'"
+                         alt="" 
+                         class="w-full h-full object-cover" />
                   }
-                  <span class="absolute bottom-0 right-0 bg-black/80 text-[8px] font-mono text-k2-accent px-1">
+                  <div class="absolute inset-0 flex items-center justify-center text-k2-accent pointer-events-none -z-0">
+                    <svg class="w-5 h-5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <span class="absolute bottom-0 right-0 bg-black/85 text-[8px] font-mono text-k2-accent px-1 rounded-tl">
                     {{ (alert.confianza * 100) | number:'1.0-0' }}%
                   </span>
                 </div>

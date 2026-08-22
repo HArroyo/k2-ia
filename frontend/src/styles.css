@@ -7,7 +7,62 @@
     background-color: #000000;
     color: #f3f4f6;
     font-family: 'Poppins', sans-serif;
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
   }
+}
+
+/* Reglas Estructurales Críticas para Custom Elements de Angular */
+app-root {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  overflow: hidden !important;
+}
+
+app-header {
+  display: block !important;
+  width: 100% !important;
+  flex-shrink: 0 !important;
+}
+
+app-param-selector {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 320px !important;
+  min-width: 320px !important;
+  max-width: 320px !important;
+  height: 100% !important;
+  flex-shrink: 0 !important;
+}
+
+app-player {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+app-alert-feed {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 320px !important;
+  min-width: 320px !important;
+  max-width: 320px !important;
+  height: 100% !important;
+  flex-shrink: 0 !important;
+}
+
+app-metrics-bar {
+  display: block !important;
+  width: 100% !important;
+  flex-shrink: 0 !important;
 }
 
 /* Custom Scrollbars */
