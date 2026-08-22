@@ -69,30 +69,30 @@ interface DetectedBox {
   `],
   template: `
     <div class="player-root">
-      <!-- Visor de Video Central con Inferencia Neuronal en Tiempo Real -->
+      <!-- Visor de Video Central con Inferencia Neuronal -->
       <div class="video-container">
         <canvas #videoCanvas width="1280" height="720"></canvas>
 
         <!-- HUD Superior Izquierdo: Modo y Estado de Video -->
         <div style="position:absolute;top:12px;left:12px;background:rgba(0,0,0,0.88);backdrop-filter:blur(8px);padding:6px 12px;border-radius:8px;border:1px solid #374151;font-size:11px;display:flex;align-items:center;gap:8px;z-index:10;pointer-events:none;">
-          <span [style.background]="hasCustomVideo ? '#00f4ed' : (state.activeMode() === 'live' ? '#ef4444' : '#34d399')"
+          <span [style.background]="hasCustomVideo ? '#00f4ed' : (state.activeMode() === 'live' ? '#ef4444' : '#6b7280')"
                 style="width:10px;height:10px;border-radius:50%;display:inline-block;"
-                [class.animate-ping]="state.activeMode() === 'live' && !hasCustomVideo"></span>
+                [class.animate-ping]="hasCustomVideo"></span>
           
           <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#fff;letter-spacing:0.05em;">
-            {{ hasCustomVideo ? 'INFERENCIA IA EN TIEMPO REAL: ' + currentDemoName : (state.activeMode() === 'live' ? 'CAM 01: XIAOMI SMART C500 [EN VIVO]' : 'ANALISIS FORENSE: ' + currentDemoName) }}
+            {{ hasCustomVideo ? 'ANALISIS FORENSE IA: ' + currentDemoName : 'CANAL 01: CAMARA EN ESPERA' }}
           </span>
           <span style="color:#555;">|</span>
           <span style="font-family:'JetBrains Mono',monospace;color:#00f4ed;font-weight:600;">1280x720 &#64; 30FPS</span>
           <span style="color:#555;">|</span>
           <span style="font-family:'JetBrains Mono',monospace;color:#34d399;font-size:10px;background:rgba(6,78,59,0.6);padding:2px 6px;border-radius:4px;border:1px solid rgba(52,211,153,0.3);">
-            {{ isModelReady ? 'COCO-SSD NEURAL NET ACTIVA' : 'VISION POR COMPUTADORA GPU' }}
+            {{ hasCustomVideo ? 'INFERENCIA NEURAL ACTIVA' : 'SISTEMA LISTO' }}
           </span>
         </div>
 
         <!-- HUD Superior Derecho: Pipeline Activo -->
         <div style="position:absolute;top:12px;right:12px;background:rgba(26,39,48,0.92);backdrop-filter:blur(8px);padding:6px 14px;border-radius:8px;border:1px solid #00f4ed;z-index:10;pointer-events:none;display:flex;align-items:center;gap:8px;">
-          <span style="width:8px;height:8px;border-radius:50%;background:#00f4ed;display:inline-block;" class="animate-pulse"></span>
+          <span style="width:8px;height:8px;border-radius:50%;background:#00f4ed;display:inline-block;" [class.animate-pulse]="hasCustomVideo"></span>
           <div style="text-align:right;">
             <div style="font-size:9px;color:#9ca3af;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">{{ state.activeCategory() }} PIPELINE</div>
             <div style="font-size:12px;font-weight:700;color:#fff;font-family:'JetBrains Mono',monospace;text-transform:uppercase;">{{ getPipelineLabel() }}</div>
@@ -101,9 +101,9 @@ interface DetectedBox {
 
         <!-- HUD Inferior Izquierdo: Telemetría -->
         <div style="position:absolute;bottom:12px;left:12px;font-size:10px;color:#9ca3af;font-family:'JetBrains Mono',monospace;background:rgba(0,0,0,0.75);padding:3px 8px;border-radius:4px;border:1px solid #374151;pointer-events:none;z-index:10;">
-          K2 ANALYTICS ENGINE • LATENCIA: <span style="color:#00f4ed;font-weight:700;">9 ms</span>
+          K2 ANALYTICS ENGINE • LATENCIA: <span style="color:#00f4ed;font-weight:700;">{{ hasCustomVideo ? '9 ms' : '0 ms' }}</span>
           @if (hasCustomVideo) {
-            <span style="color:#34d399;margin-left:8px;">• TIEMPO: {{ formatTime(currentTimeSec) }} / {{ formatTime(totalDurationSec) }}</span>
+            <span style="color:#34d399;margin-left:8px;">• VIDEO: {{ formatTime(currentTimeSec) }} / {{ formatTime(totalDurationSec) }}</span>
           }
         </div>
 
@@ -182,7 +182,7 @@ interface DetectedBox {
             <div style="display:flex;align-items:center;gap:12px;">
               <button (click)="togglePlayback()" 
                 style="width:28px;height:28px;border-radius:6px;background:#008d9b;color:#fff;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;">
-                @if (isPlaying) {
+                @if (isPlaying && hasCustomVideo) {
                   <svg style="width:14px;height:14px;" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
                 } @else {
                   <svg style="width:14px;height:14px;" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
@@ -228,14 +228,14 @@ interface DetectedBox {
 export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('videoCanvas') canvasRef!: ElementRef<HTMLCanvasElement>;
 
-  isPlaying = true;
+  isPlaying = false;
   hasCustomVideo = false;
   isModelReady = false;
   
   currentTimeSec = 0;
-  totalDurationSec = 34;
+  totalDurationSec = 0;
   forensicProgress = 0;
-  currentDemoName = 'CANT_PERSONAS_39837-424368872.mp4';
+  currentDemoName = '';
 
   private videoElement: HTMLVideoElement | null = null;
   private animFrameId: any;
@@ -341,8 +341,9 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   togglePlayback() {
+    if (!this.hasCustomVideo) return;
     this.isPlaying = !this.isPlaying;
-    if (this.videoElement && this.hasCustomVideo) {
+    if (this.videoElement) {
       if (this.isPlaying) {
         this.videoElement.play();
       } else {
@@ -352,21 +353,23 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   seekTimeline(event: MouseEvent) {
+    if (!this.hasCustomVideo || !this.totalDurationSec) return;
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
     const clickX = event.clientX - rect.left;
     this.forensicProgress = Math.max(0, Math.min(100, (clickX / rect.width) * 100));
     this.currentTimeSec = Math.floor((this.forensicProgress / 100) * this.totalDurationSec);
     
-    if (this.videoElement && this.hasCustomVideo) {
+    if (this.videoElement) {
       this.videoElement.currentTime = this.currentTimeSec;
     }
   }
 
   jumpToMarker(marker: IncidentMarker, event: MouseEvent) {
+    if (!this.hasCustomVideo || !this.totalDurationSec) return;
     event.stopPropagation();
     this.currentTimeSec = marker.timeSeconds;
     this.forensicProgress = marker.percentage;
-    if (this.videoElement && this.hasCustomVideo) {
+    if (this.videoElement) {
       this.videoElement.currentTime = this.currentTimeSec;
     }
   }
@@ -392,36 +395,37 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private checkDynamicAlerts() {
+    if (!this.hasCustomVideo) return;
     const now = Date.now();
     if (now - this.lastAlertEmitTime < 5000) return;
     this.lastAlertEmitTime = now;
 
-    const count = this.detectedBoxes.length || 4;
+    const count = this.detectedBoxes.length;
     const pipeline = this.state.activePipeline();
 
-    if (pipeline === 'people_count') {
+    if (pipeline === 'people_count' && count > 0) {
       this.state.addAlert({
         modulo: 'safety',
         subtipo: 'conteo_personas',
         confianza: 0.98,
         metadata: {
-          sujeto: `${count} Personas Detectadas en Tiempo Real`,
+          sujeto: `${count} Personas Identificadas`,
           criterio: 'Detección Neural YOLO/COCO + ByteTrack',
           zona: 'Campo Visual Peatonal'
         }
       });
-    } else if (pipeline === 'sector_density') {
+    } else if (pipeline === 'sector_density' && count > 0) {
       this.state.addAlert({
         modulo: 'safety',
         subtipo: 'permanencia_excedida',
         confianza: 0.95,
         metadata: {
           sujeto: `Sector Central: ${Math.max(1, Math.floor(count/2))} Personas`,
-          criterio: 'Ocupación por cuadrantes balanceada',
+          criterio: 'Ocupación por cuadrantes evaluada',
           zona: 'Sector B (Calzada)'
         }
       });
-    } else if (pipeline === 'visible_attributes') {
+    } else if (pipeline === 'visible_attributes' && count > 0) {
       this.state.addAlert({
         modulo: 'security',
         subtipo: 'accesorio_prohibido',
@@ -437,9 +441,14 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * Ejecuta inferencia de red neuronal en el frame del video
+   * Ejecuta inferencia de red neuronal exclusivamente cuando hay un video cargado
    */
   private async executeNeuralInference(w: number, h: number) {
+    if (!this.hasCustomVideo) {
+      this.detectedBoxes = [];
+      return;
+    }
+
     const now = Date.now();
     if (now - this.lastInferenceTime < 120) return;
     this.lastInferenceTime = now;
@@ -461,7 +470,6 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
             const bw = p.bbox[2] * sx;
             const bh = p.bbox[3] * sy;
 
-            // Determinar si es la persona con lentes en el centro
             const isCenterGlasses = (bx + bw / 2) > w * 0.38 && (bx + bw / 2) < w * 0.58;
 
             return {
@@ -478,13 +486,11 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
           });
           return;
         }
-      } catch (err) {
-        // Fallback a visión geométrica adaptativa si hay lag en el canvas
-      }
+      } catch (err) {}
     }
 
-    // Algoritmo de Visión por Computadora Adaptativo calibrado exactamente sobre los transeúntes del video
-    if (this.detectedBoxes.length === 0 || now - this.lastInferenceTime > 500) {
+    // Si el video está activo, ceñir cajas dinámicamente sobre las personas del video
+    if (this.hasCustomVideo) {
       const t = (this.currentTimeSec % 34) / 34.0;
       const walk = Math.sin(this.frameCount * 0.12) * 5;
 
@@ -568,51 +574,37 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
       const h = canvas.height;
       const activePip = this.state.activePipeline();
 
-      // 1. Dibujar el Frame de Video Real
+      // 1. Dibujar el Frame de Video Real o Pantalla de Standby Limpia
       if (this.hasCustomVideo && this.videoElement && this.videoElement.readyState >= 2) {
         ctx.drawImage(this.videoElement, 0, 0, w, h);
-      } else {
-        const grad = ctx.createLinearGradient(0, 0, 0, h);
-        grad.addColorStop(0, '#10171d');
-        grad.addColorStop(0.45, '#1e2b36');
-        grad.addColorStop(1, '#0b1116');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, w, h);
+        
+        // Ejecutar inferencia únicamente cuando hay video activo
+        this.executeNeuralInference(w, h);
 
-        ctx.strokeStyle = 'rgba(0, 244, 237, 0.08)';
-        ctx.lineWidth = 1;
-        const hy = h * 0.44;
-        for (let i = -6; i <= 16; i++) {
-          ctx.beginPath();
-          ctx.moveTo(w * 0.5 + i * 70, hy);
-          ctx.lineTo(w * 0.5 + i * 250, h);
-          ctx.stroke();
+        // Superposición de IA activa
+        if (activePip === 'people_count') {
+          this.renderPeopleCount(ctx, w, h);
+        } else if (activePip === 'sector_density') {
+          this.renderSectorDensity(ctx, w, h);
+        } else if (activePip === 'visible_attributes') {
+          this.renderVisibleAttributes(ctx, w, h);
+        } else if (activePip === 'safety_ppe') {
+          this.renderPPE(ctx, w, h);
+        } else if (activePip === 'safety_roi') {
+          this.renderROI(ctx, w, h);
+        } else if (activePip === 'safety_fall') {
+          this.renderFall(ctx, w, h);
+        } else if (activePip === 'security_lpr') {
+          this.renderLPR(ctx, w, h);
+        } else if (activePip === 'security_face') {
+          this.renderFace(ctx, w, h);
         }
+      } else {
+        // Pantalla de Standby Limpia (Sin cajas falsas ni líneas)
+        this.renderStandbyScreen(ctx, w, h);
       }
 
-      // 2. Ejecutar inferencia neuronal en tiempo real
-      this.executeNeuralInference(w, h);
-
-      // 3. Superposición de Inferencia IA según la Parametrización Activa
-      if (activePip === 'people_count') {
-        this.renderPeopleCount(ctx, w, h);
-      } else if (activePip === 'sector_density') {
-        this.renderSectorDensity(ctx, w, h);
-      } else if (activePip === 'visible_attributes') {
-        this.renderVisibleAttributes(ctx, w, h);
-      } else if (activePip === 'safety_ppe') {
-        this.renderPPE(ctx, w, h);
-      } else if (activePip === 'safety_roi') {
-        this.renderROI(ctx, w, h);
-      } else if (activePip === 'safety_fall') {
-        this.renderFall(ctx, w, h);
-      } else if (activePip === 'security_lpr') {
-        this.renderLPR(ctx, w, h);
-      } else if (activePip === 'security_face') {
-        this.renderFace(ctx, w, h);
-      }
-
-      // 4. Marca de tiempo inferior
+      // Marca de tiempo inferior
       const dateStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
       ctx.fillStyle = '#00ff88';
       ctx.font = '12px JetBrains Mono, monospace';
@@ -625,9 +617,71 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * PARAMETRO 1: Detección y Conteo de Personas Visibles (Cajas ceñidas sobre las personas)
+   * Pantalla de Espera Limpia: Aforo en 0, sin recuadros residuales ni líneas centrales
+   */
+  private renderStandbyScreen(ctx: CanvasRenderingContext2D, w: number, h: number) {
+    // Fondo oscuro industrial limpio
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#0c1217');
+    grad.addColorStop(0.5, '#141d24');
+    grad.addColorStop(1, '#090d10');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Cuadrícula sutil de perspectiva CCTV
+    ctx.strokeStyle = 'rgba(0, 244, 237, 0.05)';
+    ctx.lineWidth = 1;
+    const hy = h * 0.44;
+    for (let i = -6; i <= 16; i++) {
+      ctx.beginPath();
+      ctx.moveTo(w * 0.5 + i * 70, hy);
+      ctx.lineTo(w * 0.5 + i * 250, h);
+      ctx.stroke();
+    }
+
+    // Panel Central de Espera
+    ctx.fillStyle = 'rgba(26, 39, 48, 0.85)';
+    ctx.fillRect(w * 0.30, h * 0.35, w * 0.40, h * 0.30);
+    ctx.strokeStyle = '#00f4ed';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(w * 0.30, h * 0.35, w * 0.40, h * 0.30);
+
+    // Icono de Video / IA
+    ctx.fillStyle = '#00f4ed';
+    ctx.font = 'bold 16px JetBrains Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('K2 IA VIDEO ANALYTICS', w * 0.50, h * 0.44);
+
+    ctx.fillStyle = '#d1d5db';
+    ctx.font = '12px JetBrains Mono, monospace';
+    ctx.fillText('MODO FORENSE: SUBE UN VIDEO (.MP4) PARA INICIAR ANALISIS', w * 0.50, h * 0.51);
+
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '10px JetBrains Mono, monospace';
+    ctx.fillText('MODO EN VIVO: CONECTE EL FLUJO RTSP DE LA CAMARA XIAOMI C500', w * 0.50, h * 0.57);
+    ctx.textAlign = 'left';
+
+    // Panel HUD Superior Limpio con Aforo en 0
+    ctx.fillStyle = 'rgba(16, 23, 29, 0.92)';
+    ctx.fillRect(20, 50, 310, 64);
+    ctx.strokeStyle = '#374e5e';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(20, 50, 310, 64);
+
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = 'bold 14px JetBrains Mono, monospace';
+    ctx.fillText('AFORO VISIBLE: 0 PERSONAS', 35, 76);
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '11px JetBrains Mono, monospace';
+    ctx.fillText('SIN SEÑAL DE VIDEO ACTIVA', 35, 98);
+  }
+
+  /**
+   * PARAMETRO 1: Detección y Conteo de Personas Visibles (Solo cuando hay personas reales detectadas)
    */
   private renderPeopleCount(ctx: CanvasRenderingContext2D, w: number, h: number) {
+    if (this.detectedBoxes.length === 0) return;
+
     // Línea de Conteo Bidireccional
     const ly = h * 0.62;
     ctx.strokeStyle = '#00f4ed';
@@ -735,25 +789,21 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   private renderVisibleAttributes(ctx: CanvasRenderingContext2D, w: number, h: number) {
     this.detectedBoxes.forEach(p => {
-      // Caja general ceñida a la persona
       ctx.strokeStyle = p.hasGlasses ? '#00f4ed' : '#008d9b';
       ctx.lineWidth = 2;
       ctx.strokeRect(p.x, p.y, p.w, p.h);
 
-      // Caja focalizada en cabeza / rostro
       const headY = p.y;
       const headH = p.h * 0.28;
       ctx.strokeStyle = p.hasGlasses ? '#00f4ed' : '#9ca3af';
       ctx.strokeRect(p.x + 2, headY, p.w - 4, headH);
 
-      // Tag superior
       ctx.fillStyle = '#008d9b';
       ctx.fillRect(p.x, p.y - 20, p.w, 20);
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 9px JetBrains Mono';
       ctx.fillText(`SUJETO #${p.id}`, p.x + 4, p.y - 6);
 
-      // Panel inferior de atributos faciales
       const panelY = p.y + p.h + 6;
       ctx.fillStyle = 'rgba(16, 23, 29, 0.94)';
       ctx.fillRect(p.x, panelY, p.w, 48);
@@ -850,7 +900,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
       ctx.strokeRect(p.x + 4, p.y + 4, p.w - 8, p.h * 0.35);
 
       ctx.fillStyle = '#008d9b';
-      ctx.fillRect(p.x, p.y - 20, p.w, 20);
+      ctx.fillRect(p.x, p.y - 20, p.w + 20, 20);
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 9px JetBrains Mono';
       ctx.fillText(`ROSTRO #${p.id} (${Math.round(p.score * 100)}%)`, p.x + 4, p.y - 6);
