@@ -16,49 +16,39 @@ interface IncidentMarker {
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <main class="w-full h-full bg-k2-bg p-4 flex flex-col justify-between overflow-hidden relative select-none">
+    <div class="w-full h-full bg-black p-3 flex flex-col justify-between overflow-hidden relative select-none">
       
-      <!-- Visor de Video Central -->
-      <div class="flex-1 bg-black rounded-2xl border border-k2-border overflow-hidden relative flex items-center justify-center group shadow-2xl min-h-0">
+      <!-- Visor de Video Central (Expandido al 100%) -->
+      <div class="flex-1 bg-black rounded-xl border border-k2-border overflow-hidden relative flex items-center justify-center shadow-2xl min-h-0 w-full">
         
-        <!-- Canvas de Renderizado IA HD (Garantiza video 100% fluido en cualquier entorno) -->
+        <!-- Canvas de Renderizado IA HD (60 FPS) -->
         <canvas 
           #videoCanvas 
           width="1280" 
           height="720" 
-          class="w-full h-full object-contain"></canvas>
-
-        <!-- Stream MJPEG del Backend si está disponible -->
-        @if (isStreamOnline) {
-          <img 
-            [src]="streamUrl" 
-            (error)="onStreamError()" 
-            (load)="onStreamLoaded()"
-            alt="K2 AI Stream" 
-            class="absolute inset-0 w-full h-full object-contain pointer-events-none" />
-        }
+          class="w-full h-full object-contain bg-black"></canvas>
 
         <!-- Overlay HUD Scanline -->
         <div class="absolute inset-0 hud-scanline pointer-events-none"></div>
 
-        <!-- HUD Superior Izquierdo: Datos de Cámara y Pipeline -->
-        <div class="absolute top-4 left-4 bg-k2-bg/85 backdrop-blur-md px-3.5 py-2 rounded-xl border border-k2-border text-xs flex items-center space-x-3 pointer-events-none shadow-lg z-10">
+        <!-- HUD Superior Izquierdo: Datos de Cámara y Modo -->
+        <div class="absolute top-3 left-3 bg-k2-bg/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-k2-border text-xs flex items-center space-x-2.5 pointer-events-none shadow-lg z-10">
           <div class="flex items-center space-x-2">
             <span class="w-2.5 h-2.5 rounded-full" [class]="state.activeMode() === 'live' ? 'bg-red-500 animate-ping' : 'bg-k2-accent'"></span>
-            <span class="font-bold tracking-wider text-white uppercase font-mono">
-              {{ state.activeMode() === 'live' ? 'CAM 01: XIAOMI SMART C500' : 'ARCHIVO FORENSE: EVID_2026.MP4' }}
+            <span class="font-bold tracking-wider text-white uppercase font-mono text-[11px]">
+              {{ state.activeMode() === 'live' ? 'CAM 01: XIAOMI SMART C500 [EN VIVO]' : 'ANALISIS FORENSE: ' + currentDemoName }}
             </span>
           </div>
           <span class="text-gray-500">|</span>
-          <span class="font-mono text-k2-accent font-semibold">1280x720 &#64; 30FPS</span>
+          <span class="font-mono text-k2-accent font-semibold text-[11px]">1280x720 &#64; 30FPS</span>
           <span class="text-gray-500">|</span>
-          <span class="text-emerald-400 font-mono text-[11px] uppercase bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
-            CUDA TENSORRT ON
+          <span class="text-emerald-400 font-mono text-[10px] uppercase bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30">
+            GPU RTX 4090 ACTIVA
           </span>
         </div>
 
         <!-- HUD Superior Derecho: Pipeline Activo Badge -->
-        <div class="absolute top-4 right-4 bg-k2-card/90 backdrop-blur-md px-4 py-2 rounded-xl border border-k2-accent text-xs flex items-center space-x-2.5 pointer-events-none shadow-k2-neon z-10">
+        <div class="absolute top-3 right-3 bg-k2-card/90 backdrop-blur-md px-3.5 py-1.5 rounded-lg border border-k2-accent text-xs flex items-center space-x-2 pointer-events-none shadow-k2-neon z-10">
           <div class="w-2 h-2 rounded-full bg-k2-accent animate-pulse"></div>
           <div class="flex flex-col text-right">
             <span class="text-[9px] text-gray-400 font-bold uppercase tracking-widest">{{ state.activeCategory() }} PIPELINE</span>
@@ -66,40 +56,88 @@ interface IncidentMarker {
           </div>
         </div>
 
-        <!-- HUD Inferior: Marcas de Agua K2 -->
-        <div class="absolute bottom-4 left-4 text-[10px] text-gray-400 font-mono pointer-events-none bg-black/70 px-2.5 py-1 rounded border border-gray-800 z-10">
-          K2 SECURITY & DEFENSE ANALYTICS • LATENCIA: <span class="text-k2-accent font-bold">16 ms</span>
+        <!-- HUD Inferior: Latencia -->
+        <div class="absolute bottom-3 left-3 text-[10px] text-gray-400 font-mono pointer-events-none bg-black/75 px-2 py-0.5 rounded border border-gray-800 z-10">
+          K2 ANALYTICS ENGINE • LATENCIA: <span class="text-k2-accent font-bold">14 ms</span>
         </div>
 
-        <!-- Overlay de Carga de Video Forense si aplica -->
-        @if (state.activeMode() === 'forensic' && isUploading) {
-          <div class="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center space-y-4 z-20">
-            <div class="w-12 h-12 border-4 border-k2-teal border-t-k2-accent rounded-full animate-spin"></div>
-            <p class="text-sm font-semibold text-k2-accent font-mono">Procesando e ingiriendo video para análisis forense...</p>
+        <!-- Overlay de Carga -->
+        @if (isUploading) {
+          <div class="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center space-y-3 z-20">
+            <div class="w-10 h-10 border-4 border-k2-teal border-t-k2-accent rounded-full animate-spin"></div>
+            <p class="text-xs font-semibold text-k2-accent font-mono">Cargando e ingiriendo video para análisis forense...</p>
           </div>
         }
       </div>
 
       <!-- Controles y Timeline para Modo Forense -->
       @if (state.activeMode() === 'forensic') {
-        <div class="mt-3 bg-k2-card/90 border border-k2-border rounded-xl p-3 flex flex-col space-y-2.5 flex-shrink-0">
-          <!-- Timeline con marcadores de incidentes -->
+        <div class="mt-2.5 bg-k2-card/95 border border-k2-border rounded-xl p-3 flex flex-col space-y-2 flex-shrink-0">
+          
+          <!-- Selector rápido de Escenarios de Prueba Forense -->
+          <div class="flex items-center justify-between pb-2 border-b border-gray-700/60">
+            <span class="text-[10px] font-bold text-gray-300 uppercase tracking-wider flex items-center space-x-1.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-k2-accent"></span>
+              <span>ESCENARIOS FORENSES DE PRUEBA:</span>
+            </span>
+
+            <div class="flex items-center space-x-1.5">
+              <button 
+                (click)="loadDemoVideo('EPP', 'safety_ppe')"
+                [class]="currentDemoKey === 'EPP' ? 'bg-k2-accent text-black font-bold' : 'bg-k2-darkblue text-gray-300 hover:text-white border border-gray-700'"
+                class="px-2 py-1 rounded text-[10px] font-mono transition-colors">
+                1. Casco/Chaleco
+              </button>
+
+              <button 
+                (click)="loadDemoVideo('ROI', 'safety_roi')"
+                [class]="currentDemoKey === 'ROI' ? 'bg-k2-accent text-black font-bold' : 'bg-k2-darkblue text-gray-300 hover:text-white border border-gray-700'"
+                class="px-2 py-1 rounded text-[10px] font-mono transition-colors">
+                2. Intrusión ROI
+              </button>
+
+              <button 
+                (click)="loadDemoVideo('CAIDA', 'safety_fall')"
+                [class]="currentDemoKey === 'CAIDA' ? 'bg-k2-accent text-black font-bold' : 'bg-k2-darkblue text-gray-300 hover:text-white border border-gray-700'"
+                class="px-2 py-1 rounded text-[10px] font-mono transition-colors">
+                3. Caída Operario
+              </button>
+
+              <button 
+                (click)="loadDemoVideo('LPR', 'security_lpr')"
+                [class]="currentDemoKey === 'LPR' ? 'bg-k2-accent text-black font-bold' : 'bg-k2-darkblue text-gray-300 hover:text-white border border-gray-700'"
+                class="px-2 py-1 rounded text-[10px] font-mono transition-colors">
+                4. Placas LPR
+              </button>
+
+              <button 
+                (click)="loadDemoVideo('FACIAL', 'security_face')"
+                [class]="currentDemoKey === 'FACIAL' ? 'bg-k2-accent text-black font-bold' : 'bg-k2-darkblue text-gray-300 hover:text-white border border-gray-700'"
+                class="px-2 py-1 rounded text-[10px] font-mono transition-colors">
+                5. Rostro Blacklist
+              </button>
+            </div>
+          </div>
+
+          <!-- Timeline con marcas de incidentes -->
           <div class="relative w-full">
             <div 
               (click)="seekTimeline($event)"
-              class="w-full h-6 bg-k2-cardDark rounded-lg overflow-hidden relative cursor-pointer group/timeline border border-gray-700">
+              class="w-full h-5 bg-k2-cardDark rounded-md overflow-hidden relative cursor-pointer group/timeline border border-gray-700">
               
-              <div class="h-full bg-gradient-to-r from-k2-teal to-k2-accent/80 transition-all duration-100" [style.width.%]="forensicProgress"></div>
+              <!-- Progreso -->
+              <div class="h-full bg-gradient-to-r from-k2-teal to-k2-accent transition-all duration-100" [style.width.%]="forensicProgress"></div>
 
+              <!-- Marcadores -->
               @for (marker of incidentMarkers; track marker.timeSeconds) {
                 <div 
                   [style.left.%]="marker.percentage"
                   (click)="jumpToMarker(marker, $event)"
-                  class="absolute top-0 bottom-0 w-2 group cursor-pointer -translate-x-1/2 flex items-center justify-center"
+                  class="absolute top-0 bottom-0 w-2.5 group cursor-pointer -translate-x-1/2 flex items-center justify-center"
                   [title]="marker.label">
                   <div class="w-1.5 h-full rounded-full shadow-lg" [class]="marker.type === 'danger' ? 'bg-red-500 shadow-k2-red-glow' : 'bg-yellow-400'"></div>
                   
-                  <div class="hidden group-hover:block absolute -top-8 bg-gray-900 text-white text-[10px] font-mono px-2 py-1 rounded border border-gray-700 whitespace-nowrap shadow-xl z-20">
+                  <div class="hidden group-hover:block absolute -top-8 bg-gray-900 text-white text-[10px] font-mono px-2 py-1 rounded border border-gray-700 whitespace-nowrap shadow-xl z-30">
                     {{ marker.label }} ({{ formatTime(marker.timeSeconds) }})
                   </div>
                 </div>
@@ -107,16 +145,16 @@ interface IncidentMarker {
             </div>
           </div>
 
-          <!-- Barra de controles de reproducción y subida -->
-          <div class="flex items-center justify-between">
+          <!-- Barra de controles y botón de subida de video propio -->
+          <div class="flex items-center justify-between pt-1">
             <div class="flex items-center space-x-3">
               <button 
                 (click)="togglePlayback()"
-                class="w-8 h-8 rounded-lg bg-k2-teal hover:bg-k2-accent hover:text-black text-white flex items-center justify-center transition-colors">
+                class="w-7 h-7 rounded-lg bg-k2-teal hover:bg-k2-accent hover:text-black text-white flex items-center justify-center transition-colors">
                 @if (isPlaying) {
-                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
+                  <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
                 } @else {
-                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                  <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                 }
               </button>
 
@@ -124,18 +162,20 @@ interface IncidentMarker {
                 <span class="text-k2-accent font-bold">{{ formatTime(currentTimeSec) }}</span> / <span>03:45</span>
               </div>
 
+              <!-- Velocidad -->
               <div class="flex items-center space-x-1 bg-k2-cardDark px-1.5 py-0.5 rounded-lg border border-gray-700 text-xs">
                 @for (spd of [1.0, 2.0, 4.0]; track spd) {
                   <button 
                     (click)="state.setForensicSpeed(spd)"
                     [class]="state.forensicSpeed() === spd ? 'bg-k2-teal text-white font-bold' : 'text-gray-400 hover:text-white'"
-                    class="px-2 py-0.5 rounded text-[11px] font-mono transition-colors">
+                    class="px-2 py-0.5 rounded text-[10px] font-mono transition-colors">
                     {{ spd }}x
                   </button>
                 }
               </div>
             </div>
 
+            <!-- Botón Subir Archivo Local -->
             <div class="flex items-center space-x-2">
               <input 
                 #fileInput 
@@ -146,30 +186,32 @@ interface IncidentMarker {
 
               <button 
                 (click)="fileInput.click()"
-                class="flex items-center space-x-2 bg-gradient-to-r from-k2-teal to-k2-accent text-black font-bold text-xs px-4 py-1.5 rounded-lg shadow-k2-neon hover:opacity-90 transition-opacity">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                class="flex items-center space-x-1.5 bg-gradient-to-r from-k2-teal to-k2-accent text-black font-bold text-xs px-3.5 py-1.5 rounded-lg shadow-k2-neon hover:opacity-90 transition-opacity">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
-                <span>SUBIR VIDEO FORENSE</span>
+                <span>SUBIR VIDEO PROPIO (.MP4)</span>
               </button>
             </div>
           </div>
+
         </div>
       }
-    </main>
+    </div>
   `
 })
 export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('videoCanvas') canvasRef!: ElementRef<HTMLCanvasElement>;
 
-  streamUrl = '';
-  isStreamOnline = false;
   isPlaying = true;
   isUploading = false;
   
-  currentTimeSec = 45;
+  currentTimeSec = 35;
   totalDurationSec = 225;
-  forensicProgress = 20;
+  forensicProgress = 15.5;
+
+  currentDemoKey = 'EPP';
+  currentDemoName = 'Infraccion_EPP_BahiaSur.mp4';
 
   readonly incidentMarkers: IncidentMarker[] = [
     { timeSeconds: 24, percentage: 10.6, label: 'Alerta: Sin Casco (EPP)', type: 'danger' },
@@ -189,8 +231,6 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   ) {}
 
   ngOnInit() {
-    this.streamUrl = `${this.apiService.getAiUrl()}/stream/video`;
-
     this.timelineTimer = setInterval(() => {
       if (this.state.activeMode() === 'forensic' && this.isPlaying) {
         this.currentTimeSec = (this.currentTimeSec + 1 * this.state.forensicSpeed()) % this.totalDurationSec;
@@ -208,12 +248,12 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.animFrameId) cancelAnimationFrame(this.animFrameId);
   }
 
-  onStreamLoaded() {
-    this.isStreamOnline = true;
-  }
-
-  onStreamError() {
-    this.isStreamOnline = false;
+  loadDemoVideo(key: string, pipeline: string) {
+    this.currentDemoKey = key;
+    this.currentDemoName = `Demo_${key}_Forensic_2026.mp4`;
+    this.state.setPipeline(pipeline);
+    this.currentTimeSec = 0;
+    this.forensicProgress = 0;
   }
 
   togglePlayback() {
@@ -243,6 +283,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     const file: File = event.target.files[0];
     if (file) {
       this.isUploading = true;
+      this.currentDemoName = file.name;
       const formData = new FormData();
       formData.append('video', file);
       formData.append('velocidad', this.state.forensicSpeed().toString());
@@ -311,34 +352,27 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
 
       // 2. Renderizado dinámico según el detector Single-Pipeline activo
       if (activePip === 'safety_ppe') {
-        // Módulo EPP
         this.renderWorker(ctx, w * 0.28 + Math.sin(t) * 20, h * 0.36, 130, 290, true, true, 'TRAB-101 (EPP VALIDO)');
         const hasHelmet = Math.floor(this.frameCount / 90) % 2 === 0;
         this.renderWorker(ctx, w * 0.64 - Math.cos(t) * 25, h * 0.38, 130, 290, hasHelmet, false, 'TRAB-102 (INFRACCION EPP)');
       } else if (activePip === 'safety_roi') {
-        // Módulo ROI
         this.renderROI(ctx, w, h, t);
       } else if (activePip === 'safety_fall') {
-        // Módulo Caídas
         this.renderFall(ctx, w, h);
       } else if (activePip === 'security_lpr') {
-        // Módulo LPR
         this.renderLPR(ctx, w, h);
       } else if (activePip === 'security_face') {
-        // Módulo Facial
         this.renderFace(ctx, w, h);
       } else if (activePip === 'security_accessories') {
-        // Módulo Accesorios
         this.renderAccessories(ctx, w, h);
       } else if (activePip === 'security_attributes') {
-        // Módulo Atributos
         this.renderAttributes(ctx, w, h, t);
       }
 
       // 3. Telemetría inferior
       ctx.fillStyle = 'rgba(200, 200, 200, 0.8)';
       ctx.font = '13px JetBrains Mono, monospace';
-      const modeLabel = this.state.activeMode() === 'live' ? 'CAM: XIAOMI SMART C500 [EN VIVO]' : 'MODO FORENSE (ARCHIVO)';
+      const modeLabel = this.state.activeMode() === 'live' ? 'CAM: XIAOMI SMART C500 [EN VIVO]' : `MODO FORENSE: ${this.currentDemoName}`;
       ctx.fillText(`K2 SEGURIDAD & RESGUARDO - ${modeLabel}`, 24, h - 24);
 
       const dateStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
@@ -380,7 +414,6 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private renderROI(ctx: CanvasRenderingContext2D, w: number, h: number, t: number) {
-    // Polígono de zona restringida
     ctx.beginPath();
     ctx.moveTo(w * 0.45, h * 0.40);
     ctx.lineTo(w * 0.90, h * 0.40);
@@ -397,7 +430,6 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     ctx.font = 'bold 12px JetBrains Mono';
     ctx.fillText('[ZONA RESTRINGIDA - AREA MAQUINARIA]', w * 0.46, h * 0.44);
 
-    // Intruso dentro de zona
     const px = w * 0.58 + Math.cos(t) * 40;
     const py = h * 0.48;
     ctx.strokeStyle = '#ff3355';
@@ -414,7 +446,6 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     const cycle = this.frameCount % 240;
     const isFallen = cycle > 80;
 
-    // Operario A Normal
     ctx.strokeStyle = '#00f4ed';
     ctx.strokeRect(w * 0.22, h * 0.38, 100, 240);
     ctx.fillStyle = '#008d9b';
@@ -423,7 +454,6 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     ctx.font = 'bold 10px JetBrains Mono';
     ctx.fillText('OPERARIO A (ESTABLE)', w * 0.22 + 4, h * 0.38 - 6);
 
-    // Operario B Caído
     const bx = w * 0.62;
     const by = isFallen ? h * 0.65 : h * 0.38;
     const bw = isFallen ? 220 : 100;
@@ -470,7 +500,6 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private renderFace(ctx: CanvasRenderingContext2D, w: number, h: number) {
-    // Rostro 1
     const r1x = w * 0.28;
     const r1y = h * 0.36;
     ctx.strokeStyle = '#00f4ed';
@@ -484,7 +513,6 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     ctx.fillStyle = '#00f4ed';
     ctx.fillText('WHITELIST (PERMITIDO)', r1x + 6, r1y - 6);
 
-    // Rostro 2
     const r2x = w * 0.62;
     const r2y = h * 0.36;
     ctx.strokeStyle = '#ff3355';
