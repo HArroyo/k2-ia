@@ -13,12 +13,14 @@ apt-get install -y ffmpeg libsm6 libxext6 libgl1 libglib2.0-0 curl php-cli php-s
 
 # 2. Liberar puertos 4200, 8000, 8001, 3001 de procesos anteriores
 echo "[1/4] Liberando puertos de red y cerrando procesos anteriores..."
-fuser -k 4200/tcp 8000/tcp 8001/tcp 3001/tcp 2>/dev/null || true
-pkill -9 -f "python3 -m http.server" || true
-pkill -9 -f "python3 main.py" || true
-pkill -9 -f "php -S 0.0.0.0:8000" || true
-pkill -9 -f "node server.js" || true
-sleep 1
+fuser -k -9 4200/tcp 8000/tcp 8001/tcp 3001/tcp 2>/dev/null || true
+kill -9 $(lsof -t -i:4200 -i:8000 -i:8001 -i:3001) 2>/dev/null || true
+pkill -9 -f "uvicorn" 2>/dev/null || true
+pkill -9 -f "main.py" 2>/dev/null || true
+pkill -9 -f "server.js" 2>/dev/null || true
+pkill -9 -f "http.server" 2>/dev/null || true
+pkill -9 -f "php" 2>/dev/null || true
+sleep 2
 
 # 3. Iniciar servidor Redis local
 echo "[2/4] Iniciando Redis Server..."
