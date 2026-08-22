@@ -12,8 +12,86 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   
-  <!-- Material Symbols & Icons -->
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <!-- Estilos Estructurales Globales Inmediatos (Layout 3 Columnas Garantizado) -->
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: #000000;
+      color: #f3f4f6;
+      font-family: 'Poppins', sans-serif;
+    }
+
+    app-root {
+      display: flex !important;
+      flex-direction: column !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      overflow: hidden !important;
+    }
+
+    app-header {
+      display: block !important;
+      width: 100% !important;
+      height: 64px !important;
+      flex-shrink: 0 !important;
+    }
+
+    .k2-body-container {
+      display: flex !important;
+      flex-direction: row !important;
+      flex: 1 1 0% !important;
+      width: 100% !important;
+      height: calc(100vh - 64px - 80px) !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
+    }
+
+    app-param-selector {
+      display: flex !important;
+      flex-direction: column !important;
+      width: 320px !important;
+      min-width: 320px !important;
+      max-width: 320px !important;
+      height: 100% !important;
+      flex-shrink: 0 !important;
+      background-color: #1a2730 !important;
+      border-right: 1px solid #374e5e !important;
+    }
+
+    app-player {
+      display: flex !important;
+      flex-direction: column !important;
+      flex: 1 1 0% !important;
+      min-width: 0 !important;
+      width: calc(100vw - 640px) !important;
+      height: 100% !important;
+      overflow: hidden !important;
+      background-color: #000000 !important;
+    }
+
+    app-alert-feed {
+      display: flex !important;
+      flex-direction: column !important;
+      width: 320px !important;
+      min-width: 320px !important;
+      max-width: 320px !important;
+      height: 100% !important;
+      flex-shrink: 0 !important;
+      background-color: #1a2730 !important;
+      border-left: 1px solid #374e5e !important;
+    }
+
+    app-metrics-bar {
+      display: block !important;
+      width: 100% !important;
+      height: 80px !important;
+      flex-shrink: 0 !important;
+    }
+  </style>
 </head>
 <body class="h-full bg-k2-bg text-gray-100 font-sans select-none overflow-hidden">
   <app-root></app-root>

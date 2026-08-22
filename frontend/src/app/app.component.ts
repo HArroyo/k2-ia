@@ -22,22 +22,22 @@ import { AlertModalComponent } from './components/alert-modal/alert-modal.compon
   template: `
     <div class="h-screen w-screen flex flex-col bg-k2-bg text-gray-100 overflow-hidden font-sans">
       <!-- Header Superior -->
-      <app-header class="flex-shrink-0"></app-header>
+      <app-header></app-header>
 
-      <!-- Cuerpo Central (3 Columnas: Sidebar Izquierdo + Video Player Central + Feed Alertas Derecho) -->
-      <div class="flex-1 flex flex-row min-h-0 w-full overflow-hidden">
+      <!-- Cuerpo Central (3 Columnas Exactas: Selector + Player + AlertFeed) -->
+      <div class="k2-body-container">
         <!-- Sidebar Izquierdo: Selector de Parametrización Única -->
-        <app-param-selector class="w-80 flex-shrink-0 h-full flex flex-col"></app-param-selector>
+        <app-param-selector></app-param-selector>
 
         <!-- Panel Central: Player de Video e Inferencia IA -->
-        <app-player class="flex-1 flex flex-col min-w-0 h-full"></app-player>
+        <app-player></app-player>
 
         <!-- Sidebar Derecho: Feed de Alertas en Tiempo Real -->
-        <app-alert-feed class="w-80 flex-shrink-0 h-full flex flex-col"></app-alert-feed>
+        <app-alert-feed></app-alert-feed>
       </div>
 
       <!-- Barra Inferior: Métricas Rápidas del Turno -->
-      <app-metrics-bar class="flex-shrink-0"></app-metrics-bar>
+      <app-metrics-bar></app-metrics-bar>
 
       <!-- Modal de Auditoría / Detalle de Evento -->
       <app-alert-modal></app-alert-modal>
