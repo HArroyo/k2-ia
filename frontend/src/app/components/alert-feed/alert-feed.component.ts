@@ -8,7 +8,7 @@ import { AlertEvent, ApiService } from '../../services/api.service';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <aside class="w-80 bg-k2-card/95 border-l border-k2-border flex flex-col h-full overflow-hidden select-none">
+    <aside class="w-full h-full bg-k2-card/95 border-l border-k2-border flex flex-col overflow-hidden select-none">
       <!-- Encabezado del Feed -->
       <div class="p-4 border-b border-k2-border/60 flex items-center justify-between">
         <div class="flex items-center space-x-2">

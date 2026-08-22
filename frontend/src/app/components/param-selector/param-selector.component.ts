@@ -17,7 +17,7 @@ interface PipelineOption {
   standalone: true,
   imports: [CommonModule],
   template: `
-    <aside class="w-80 bg-k2-card/95 border-r border-k2-border flex flex-col h-full overflow-y-auto select-none">
+    <aside class="w-full h-full bg-k2-card/95 border-r border-k2-border flex flex-col overflow-y-auto select-none">
       <!-- Título de Sección -->
       <div class="p-4 border-b border-k2-border/60">
         <div class="flex items-center justify-between">
