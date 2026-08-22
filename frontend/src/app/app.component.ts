@@ -19,38 +19,83 @@ import { AlertModalComponent } from './components/alert-modal/alert-modal.compon
     MetricsBarComponent,
     AlertModalComponent
   ],
+  styles: [`
+    :host {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .k2-shell {
+      display: flex;
+      flex-direction: column;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #000;
+      color: #f3f4f6;
+      font-family: 'Poppins', sans-serif;
+    }
+    .k2-header {
+      height: 64px;
+      flex-shrink: 0;
+      width: 100%;
+    }
+    .k2-body {
+      display: flex;
+      flex-direction: row;
+      flex: 1;
+      width: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .k2-sidebar-left {
+      width: 280px;
+      min-width: 280px;
+      max-width: 280px;
+      height: 100%;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .k2-center {
+      flex: 1;
+      min-width: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+    .k2-sidebar-right {
+      width: 320px;
+      min-width: 320px;
+      max-width: 320px;
+      height: 100%;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .k2-footer {
+      height: 64px;
+      flex-shrink: 0;
+      width: 100%;
+    }
+  `],
   template: `
-    <div class="h-screen w-screen flex flex-col bg-black text-gray-100 overflow-hidden font-sans select-none">
-      <!-- 1. Header Superior (64px) -->
-      <div class="h-16 w-full flex-shrink-0 border-b border-k2-border">
+    <div class="k2-shell">
+      <div class="k2-header">
         <app-header></app-header>
       </div>
-
-      <!-- 2. Cuerpo Central: Grid Estricto de 3 Columnas (320px - Centro 1fr - 320px) -->
-      <div class="flex-1 w-full grid grid-cols-[320px_1fr_320px] min-h-0 overflow-hidden">
-        
-        <!-- Columna Izquierda: Parametrización Activa (320px) -->
-        <div class="w-[320px] h-full overflow-hidden bg-k2-card/95 border-r border-k2-border flex flex-col">
-          <app-param-selector class="w-full h-full"></app-param-selector>
+      <div class="k2-body">
+        <div class="k2-sidebar-left">
+          <app-param-selector></app-param-selector>
         </div>
-
-        <!-- Columna Central: Visor de Video HD (Ocupa el 100% del espacio central) -->
-        <div class="w-full h-full min-w-0 overflow-hidden bg-black flex flex-col">
-          <app-player class="w-full h-full"></app-player>
+        <div class="k2-center">
+          <app-player></app-player>
         </div>
-
-        <!-- Columna Derecha: Feed de Alertas en Vivo (Pegado al borde derecho 320px) -->
-        <div class="w-[320px] h-full overflow-hidden bg-k2-card/95 border-l border-k2-border flex flex-col">
-          <app-alert-feed class="w-full h-full"></app-alert-feed>
+        <div class="k2-sidebar-right">
+          <app-alert-feed></app-alert-feed>
         </div>
       </div>
-
-      <!-- 3. Barra Inferior: Métricas Rápidas del Turno (80px) -->
-      <div class="h-20 w-full flex-shrink-0 border-t border-k2-border">
+      <div class="k2-footer">
         <app-metrics-bar></app-metrics-bar>
       </div>
-
-      <!-- Modal de Auditoría / Detalle de Evento -->
       <app-alert-modal></app-alert-modal>
     </div>
   `
