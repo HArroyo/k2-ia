@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, EMPTY } from 'rxjs';
 import { io, Socket } from 'socket.io-client';
 import { AlertEvent } from './api.service';
 
@@ -7,41 +7,36 @@ import { AlertEvent } from './api.service';
   providedIn: 'root'
 })
 export class SocketService {
-  private socket: Socket;
-  private socketUrl: string;
+  private socket: Socket | null = null;
 
   constructor() {
-    const hostname = window.location.hostname;
-    if (hostname.includes('proxy.runpod.net')) {
-      const podId = hostname.split('-')[0];
-      this.socketUrl = `https://${podId}-3001.proxy.runpod.net`;
-    } else {
-      this.socketUrl = 'http://localhost:3001';
+    try {
+      const hostname = window.location.hostname;
+      // Solo conectar a socket.io si estamos en localhost o si el puerto 3001 está disponible
+      if (!hostname.includes('proxy.runpod.net')) {
+        this.socket = io('http://localhost:3001', {
+          transports: ['websocket', 'polling'],
+          reconnectionAttempts: 2,
+          timeout: 2000
+        });
+      }
+    } catch {
+      this.socket = null;
     }
-
-    this.socket = io(this.socketUrl, {
-      transports: ['websocket', 'polling'],
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000
-    });
-
-    this.socket.on('connect', () => {
-      console.log('[SocketService] Conectado a pasarela realtime');
-    });
-
-    this.socket.on('disconnect', () => {
-      console.log('[SocketService] Desconectado de pasarela realtime');
-    });
   }
 
   listenToAlerts(): Observable<AlertEvent> {
+    if (!this.socket) {
+      return EMPTY;
+    }
+
     return new Observable(observer => {
-      this.socket.on('k2:alert', (data: AlertEvent) => {
+      this.socket?.on('k2:alert', (data: AlertEvent) => {
         observer.next(data);
       });
 
       return () => {
-        this.socket.off('k2:alert');
+        this.socket?.off('k2:alert');
       };
     });
   }

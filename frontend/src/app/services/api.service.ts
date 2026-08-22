@@ -31,13 +31,13 @@ export class ApiService {
   constructor(private http: HttpClient) {
     const hostname = window.location.hostname;
     if (hostname.includes('proxy.runpod.net')) {
-      // Extraer el ID del pod de la URL (ej: qk9p20yrvoj9m3-4200 -> qk9p20yrvoj9m3)
       const podId = hostname.split('-')[0];
+      // Todo el tráfico fluye por el puerto 8000 verificado y expuesto
       this.apiUrl = `https://${podId}-8000.proxy.runpod.net/api`;
-      this.aiUrl = `https://${podId}-8001.proxy.runpod.net/api`;
+      this.aiUrl = `https://${podId}-8000.proxy.runpod.net/api`;
     } else {
       this.apiUrl = 'http://localhost:8000/api';
-      this.aiUrl = 'http://localhost:8001/api';
+      this.aiUrl = 'http://localhost:8000/api';
     }
   }
 
