@@ -82,6 +82,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'k2-realtime-gateway', timestamp: new Date().toISOString() });
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`[Realtime Gateway] Escuchando en http://0.0.0.0:${PORT}`);
 });
+
