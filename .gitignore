@@ -1,6 +1,5 @@
 # Dependencias de Node.js / Angular
 node_modules/
-dist/
 .angular/
 npm-debug.log*
 yarn-debug.log*
