@@ -25,10 +25,29 @@ export interface ShiftMetrics {
   providedIn: 'root'
 })
 export class ApiService {
-  private apiUrl = 'http://localhost:8000/api';
-  private aiUrl = 'http://localhost:8001/api';
+  private apiUrl: string;
+  private aiUrl: string;
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) {
+    const hostname = window.location.hostname;
+    if (hostname.includes('proxy.runpod.net')) {
+      // Extraer el ID del pod de la URL (ej: qk9p20yrvoj9m3-4200 -> qk9p20yrvoj9m3)
+      const podId = hostname.split('-')[0];
+      this.apiUrl = `https://${podId}-8000.proxy.runpod.net/api`;
+      this.aiUrl = `https://${podId}-8001.proxy.runpod.net/api`;
+    } else {
+      this.apiUrl = 'http://localhost:8000/api';
+      this.aiUrl = 'http://localhost:8001/api';
+    }
+  }
+
+  getApiUrl(): string {
+    return this.apiUrl;
+  }
+
+  getAiUrl(): string {
+    return this.aiUrl;
+  }
 
   getMetrics(): Observable<{ status: string; data: ShiftMetrics }> {
     return this.http.get<{ status: string; data: ShiftMetrics }>(`${this.apiUrl}/metricas`);

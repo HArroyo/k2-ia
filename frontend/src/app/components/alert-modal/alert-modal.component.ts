@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { PipelineStateService } from '../../services/pipeline-state.service';
+import { ApiService } from '../../services/api.service';
 
 @Component({
   selector: 'app-alert-modal',
@@ -102,7 +103,10 @@ import { PipelineStateService } from '../../services/pipeline-state.service';
   `
 })
 export class AlertModalComponent {
-  constructor(public state: PipelineStateService) {}
+  constructor(
+    public state: PipelineStateService,
+    private apiService: ApiService
+  ) {}
 
   formatSubtipo(subtipo: string): string {
     const map: Record<string, string> = {
@@ -127,6 +131,6 @@ export class AlertModalComponent {
   getSnapshotUrl(path: string): string {
     if (path.startsWith('http')) return path;
     const filename = path.split('/').pop();
-    return `http://localhost:8001/api/snapshots/${filename}`;
+    return `${this.apiService.getAiUrl()}/snapshots/${filename}`;
   }
 }

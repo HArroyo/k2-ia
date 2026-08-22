@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { PipelineStateService } from '../../services/pipeline-state.service';
-import { AlertEvent } from '../../services/api.service';
+import { AlertEvent, ApiService } from '../../services/api.service';
 
 @Component({
   selector: 'app-alert-feed',
@@ -84,7 +84,10 @@ import { AlertEvent } from '../../services/api.service';
   `
 })
 export class AlertFeedComponent {
-  constructor(public state: PipelineStateService) {}
+  constructor(
+    public state: PipelineStateService,
+    private apiService: ApiService
+  ) {}
 
   formatSubtipo(subtipo: string): string {
     const map: Record<string, string> = {
@@ -142,6 +145,6 @@ export class AlertFeedComponent {
   getSnapshotUrl(path: string): string {
     if (path.startsWith('http')) return path;
     const filename = path.split('/').pop();
-    return `http://localhost:8001/api/snapshots/${filename}`;
+    return `${this.apiService.getAiUrl()}/snapshots/${filename}`;
   }
 }

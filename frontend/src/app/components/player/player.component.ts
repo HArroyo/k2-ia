@@ -162,7 +162,7 @@ interface IncidentMarker {
 export class PlayerComponent implements OnInit, OnDestroy {
   @ViewChild('streamImg') streamImgRef!: ElementRef<HTMLImageElement>;
 
-  streamUrl = 'http://localhost:8001/api/stream/video';
+  streamUrl = '';
   streamActive = true;
   isPlaying = true;
   isUploading = false;
@@ -188,6 +188,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
+    this.streamUrl = `${this.apiService.getAiUrl()}/stream/video`;
     this.timer = setInterval(() => {
       if (this.state.activeMode() === 'forensic' && this.isPlaying) {
         this.currentTimeSec = (this.currentTimeSec + 1 * this.state.forensicSpeed()) % this.totalDurationSec;
@@ -201,9 +202,8 @@ export class PlayerComponent implements OnInit, OnDestroy {
   }
 
   handleStreamError() {
-    // Si el servidor de streaming se está reiniciando, reintentar tras breve delay
     setTimeout(() => {
-      this.streamUrl = `http://localhost:8001/api/stream/video?t=${Date.now()}`;
+      this.streamUrl = `${this.apiService.getAiUrl()}/stream/video?t=${Date.now()}`;
     }, 2000);
   }
 

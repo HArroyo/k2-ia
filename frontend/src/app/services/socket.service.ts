@@ -8,9 +8,17 @@ import { AlertEvent } from './api.service';
 })
 export class SocketService {
   private socket: Socket;
-  private socketUrl = 'http://localhost:3001';
+  private socketUrl: string;
 
   constructor() {
+    const hostname = window.location.hostname;
+    if (hostname.includes('proxy.runpod.net')) {
+      const podId = hostname.split('-')[0];
+      this.socketUrl = `https://${podId}-3001.proxy.runpod.net`;
+    } else {
+      this.socketUrl = 'http://localhost:3001';
+    }
+
     this.socket = io(this.socketUrl, {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 10,
