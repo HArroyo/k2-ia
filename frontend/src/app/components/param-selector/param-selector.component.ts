@@ -10,6 +10,7 @@ interface PipelineOption {
   description: string;
   model: string;
   badgeColor: string;
+  priority?: boolean;
 }
 
 @Component({
@@ -33,13 +34,13 @@ interface PipelineOption {
       </div>
 
       <div class="p-3 space-y-5 flex-1">
-        <!-- SECCIÓN 1: SAFETY (Seguridad Ocupacional) -->
+        <!-- SECCIÓN 1: SEGURIDAD OCUPACIONAL & CONTROL DE FLUJO (SAFETY) -->
         <div>
           <div class="flex items-center space-x-2 px-2 mb-2">
             <svg class="w-4 h-4 text-k2-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
-            <span class="text-xs font-bold text-k2-accent tracking-wider uppercase">MÓDULO 1: SAFETY</span>
+            <span class="text-xs font-bold text-k2-accent tracking-wider uppercase">MÓDULO 1: SAFETY & AFORO</span>
           </div>
 
           <div class="space-y-1.5">
@@ -57,9 +58,11 @@ interface PipelineOption {
                       <span [innerHTML]="opt.icon"></span>
                     </div>
                     <div>
-                      <h4 class="text-xs font-bold" [class]="state.activePipeline() === opt.id ? 'text-white' : 'text-gray-200'">
-                        {{ opt.name }}
-                      </h4>
+                      <div class="flex items-center space-x-1.5">
+                        <h4 class="text-xs font-bold" [class]="state.activePipeline() === opt.id ? 'text-white' : 'text-gray-200'">
+                          {{ opt.name }}
+                        </h4>
+                      </div>
                       <p class="text-[10px] text-gray-400 mt-0.5 line-clamp-1">{{ opt.description }}</p>
                     </div>
                   </div>
@@ -84,13 +87,13 @@ interface PipelineOption {
           </div>
         </div>
 
-        <!-- SECCIÓN 2: SECURITY (Seguridad Patrimonial) -->
+        <!-- SECCIÓN 2: SEGURIDAD PATRIMONIAL & CARACTERÍSTICAS (SECURITY) -->
         <div>
           <div class="flex items-center space-x-2 px-2 mb-2">
             <svg class="w-4 h-4 text-k2-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
-            <span class="text-xs font-bold text-k2-accent tracking-wider uppercase">MÓDULO 2: SECURITY</span>
+            <span class="text-xs font-bold text-k2-accent tracking-wider uppercase">MÓDULO 2: SECURITY & ATRIBUTOS</span>
           </div>
 
           <div class="space-y-1.5">
@@ -143,6 +146,24 @@ export class ParamSelectorComponent {
 
   readonly safetyOptions: PipelineOption[] = [
     {
+      id: 'people_count',
+      name: 'Detección y Conteo de Personas',
+      category: 'safety',
+      icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>',
+      description: 'Aforo en tiempo real, conteo bidireccional y tracking',
+      model: 'YOLOv11 Person + ByteTrack',
+      badgeColor: 'border-k2-accent text-k2-accent'
+    },
+    {
+      id: 'sector_density',
+      name: 'Ocupación y Densidad por Sectores',
+      category: 'safety',
+      icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>',
+      description: 'Límite de capacidad y mapa de densidad por áreas',
+      model: 'Sector Polygon Heatmap',
+      badgeColor: 'border-yellow-500 text-yellow-400'
+    },
+    {
       id: 'safety_ppe',
       name: 'Casco y Chaleco (EPP)',
       category: 'safety',
@@ -173,6 +194,15 @@ export class ParamSelectorComponent {
 
   readonly securityOptions: PipelineOption[] = [
     {
+      id: 'visible_attributes',
+      name: 'Lentes, Gorra y Mascarilla',
+      category: 'security',
+      icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>',
+      description: 'Identificación de accesorios faciales y de seguridad',
+      model: 'Head-Crop MultiLabel Classifier',
+      badgeColor: 'border-k2-accent text-k2-accent'
+    },
+    {
       id: 'security_lpr',
       name: 'Identificación Placas (LPR)',
       category: 'security',
@@ -189,24 +219,6 @@ export class ParamSelectorComponent {
       description: 'ArcFace 512d & Similitud Coseno Listas',
       model: 'RetinaFace + ArcFace',
       badgeColor: 'border-purple-500 text-purple-400'
-    },
-    {
-      id: 'security_accessories',
-      name: 'Accesorios Prohibidos',
-      category: 'security',
-      icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>',
-      description: 'Detección de gorras, lentes oscuros y mascarillas',
-      model: 'Head-Crop MultiLabel',
-      badgeColor: 'border-pink-500 text-pink-400'
-    },
-    {
-      id: 'security_attributes',
-      name: 'Características Físicas',
-      category: 'security',
-      icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>',
-      description: 'Colores HSV ropa superior/inferior y complexión',
-      model: 'HSV Color Segmenter',
-      badgeColor: 'border-blue-500 text-blue-400'
     }
   ];
 }

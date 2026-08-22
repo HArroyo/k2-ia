@@ -7,6 +7,9 @@ from redis_client import notifier
 from video_sources import video_manager
 
 # Importar detectores
+from detectors.safety_person_count import PersonCountDetector
+from detectors.safety_density import SectorDensityDetector
+from detectors.security_visible_accessories import VisibleAccessoriesDetector
 from detectors.safety_ppe import PPEDetector
 from detectors.safety_roi import ROIDetector
 from detectors.safety_fall import FallDetector
@@ -24,11 +27,14 @@ class PipelineManager:
     """
     def __init__(self):
         self.lock = threading.Lock()
-        self.active_pipeline = "safety_ppe"  # Default active pipeline
-        self.active_category = "safety"      # "safety" | "security"
+        self.active_pipeline = "people_count"  # Default active pipeline
+        self.active_category = "safety"        # "safety" | "security"
         
         # Instanciar detectores
         self.detectors = {
+            "people_count": PersonCountDetector(),
+            "sector_density": SectorDensityDetector(),
+            "visible_attributes": VisibleAccessoriesDetector(),
             "safety_ppe": PPEDetector(),
             "safety_roi": ROIDetector(),
             "safety_fall": FallDetector(),
@@ -41,7 +47,7 @@ class PipelineManager:
         self.roi_polygon = None
         self.frame_idx = 0
         self.fps = 30.0
-        self.gpu_utilization = 42.5 # Simulated / RunPod RTX 4090 VRAM metrics
+        self.gpu_utilization = 42.5
         self.last_frame_processed = None
 
     def set_active_pipeline(self, pipeline_name: str) -> dict:
@@ -50,7 +56,7 @@ class PipelineManager:
                 raise ValueError(f"Pipeline no válido: {pipeline_name}")
 
             self.active_pipeline = pipeline_name
-            self.active_category = "safety" if pipeline_name.startswith("safety") else "security"
+            self.active_category = "safety" if pipeline_name in ("people_count", "sector_density", "safety_ppe", "safety_roi", "safety_fall") else "security"
             
             logger.info(f"Pipeline activo cambiado a: {self.active_pipeline} ({self.active_category})")
             
@@ -78,24 +84,18 @@ class PipelineManager:
             return {"status": "success", "polygon": points}
 
     def process_next_frame(self) -> tuple[np.ndarray, list]:
-        """
-        Obtiene el siguiente frame de la fuente de video actual
-        y aplica la inferencia del detector activo.
-        """
         raw_frame = video_manager.get_frame(1280, 720)
         self.frame_idx += 1
 
         with self.lock:
             current_detector_key = self.active_pipeline
-            detector = self.detectors[current_detector_key]
+            detector = self.detectors.get(current_detector_key, self.detectors["people_count"])
 
-        # Ejecutar inferencia según el detector activo
         if current_detector_key == "safety_roi":
             annotated_frame, events = detector.process_frame(raw_frame, self.frame_idx, self.roi_polygon)
         else:
             annotated_frame, events = detector.process_frame(raw_frame, self.frame_idx)
 
-        # Si hay eventos críticos, publicarlos a Redis y guardar snapshot
         for ev in events:
             notifier.publish_event(ev, frame=annotated_frame)
 
