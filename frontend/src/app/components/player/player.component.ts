@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { PipelineStateService } from '../../services/pipeline-state.service';
 import { ApiService } from '../../services/api.service';
+import { VideoStorageService } from '../../services/video-storage.service';
 
 declare var cocoSsd: any;
 
@@ -25,15 +26,6 @@ interface DetectedBox {
   hasMask?: boolean;
   isFallen?: boolean;
   angle?: number;
-}
-
-interface PreloadedDemo {
-  pipeline: string;
-  title: string;
-  fileName: string;
-  videoUrl: string;
-  description: string;
-  badge: string;
 }
 
 @Component({
@@ -91,13 +83,13 @@ interface PreloadedDemo {
                 [class.animate-ping]="hasCustomVideo"></span>
           
           <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#fff;letter-spacing:0.05em;">
-            {{ hasCustomVideo ? 'ANALISIS FORENSE IA: ' + currentDemoName : 'CANAL 01: CAMARA EN ESPERA' }}
+            {{ hasCustomVideo ? 'VIDEO ACTIVO (' + getPipelineLabel() + '): ' + currentDemoName : 'CANAL 01: CAMARA EN ESPERA' }}
           </span>
           <span style="color:#555;">|</span>
           <span style="font-family:'JetBrains Mono',monospace;color:#00f4ed;font-weight:600;">1280x720 &#64; 30FPS</span>
           <span style="color:#555;">|</span>
           <span style="font-family:'JetBrains Mono',monospace;color:#34d399;font-size:10px;background:rgba(6,78,59,0.6);padding:2px 6px;border-radius:4px;border:1px solid rgba(52,211,153,0.3);">
-            {{ hasCustomVideo ? 'INFERENCIA NEURAL ACTIVA' : 'SISTEMA LISTO' }}
+            {{ hasCustomVideo ? 'VIDEO PERSISTENTE GUARDADO' : 'SIN VIDEO ASIGNADO' }}
           </span>
         </div>
 
@@ -126,16 +118,16 @@ interface PreloadedDemo {
       @if (state.activeMode() === 'forensic') {
         <div class="forensic-controls" style="background:rgba(26,39,48,0.95);border:1px solid #374e5e;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;">
           
-          <!-- Selector Rápido de Parámetros con Videos Precargados -->
+          <!-- Selector Rápido de Parámetros -->
           <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:6px;border-bottom:1px solid rgba(55,78,94,0.5);">
             <span style="font-size:10px;font-weight:700;color:#00f4ed;text-transform:uppercase;letter-spacing:0.08em;display:flex;align-items:center;gap:6px;">
               <span style="width:6px;height:6px;border-radius:50%;background:#00f4ed;"></span>
-              <span>VIDEOS PRECARGADOS POR PARÁMETRO:</span>
+              <span>PARAMETRIZACIONES CLAVE:</span>
             </span>
 
             <div style="display:flex;gap:6px;">
               <button 
-                (click)="selectScenarioAndPlay('people_count')"
+                (click)="switchParameter('people_count')"
                 [style.background]="state.activePipeline() === 'people_count' ? '#00f4ed' : '#1a2730'"
                 [style.color]="state.activePipeline() === 'people_count' ? '#000' : '#d1d5db'"
                 [style.fontWeight]="state.activePipeline() === 'people_count' ? '700' : '400'"
@@ -144,7 +136,7 @@ interface PreloadedDemo {
               </button>
 
               <button 
-                (click)="selectScenarioAndPlay('sector_density')"
+                (click)="switchParameter('sector_density')"
                 [style.background]="state.activePipeline() === 'sector_density' ? '#00f4ed' : '#1a2730'"
                 [style.color]="state.activePipeline() === 'sector_density' ? '#000' : '#d1d5db'"
                 [style.fontWeight]="state.activePipeline() === 'sector_density' ? '700' : '400'"
@@ -153,7 +145,7 @@ interface PreloadedDemo {
               </button>
 
               <button 
-                (click)="selectScenarioAndPlay('visible_attributes')"
+                (click)="switchParameter('visible_attributes')"
                 [style.background]="state.activePipeline() === 'visible_attributes' ? '#00f4ed' : '#1a2730'"
                 [style.color]="state.activePipeline() === 'visible_attributes' ? '#000' : '#d1d5db'"
                 [style.fontWeight]="state.activePipeline() === 'visible_attributes' ? '700' : '400'"
@@ -162,7 +154,7 @@ interface PreloadedDemo {
               </button>
 
               <button 
-                (click)="selectScenarioAndPlay('safety_fall')"
+                (click)="switchParameter('safety_fall')"
                 [style.background]="state.activePipeline() === 'safety_fall' ? '#00f4ed' : '#1a2730'"
                 [style.color]="state.activePipeline() === 'safety_fall' ? '#000' : '#d1d5db'"
                 [style.fontWeight]="state.activePipeline() === 'safety_fall' ? '700' : '400'"
@@ -171,7 +163,7 @@ interface PreloadedDemo {
               </button>
 
               <button 
-                (click)="selectScenarioAndPlay('safety_ppe')"
+                (click)="switchParameter('safety_ppe')"
                 [style.background]="state.activePipeline() === 'safety_ppe' ? '#00f4ed' : '#1a2730'"
                 [style.color]="state.activePipeline() === 'safety_ppe' ? '#000' : '#d1d5db'"
                 [style.fontWeight]="state.activePipeline() === 'safety_ppe' ? '700' : '400'"
@@ -197,7 +189,7 @@ interface PreloadedDemo {
             }
           </div>
 
-          <!-- Controles de Reproducción, Demo Precargada y Subida de Video -->
+          <!-- Controles de Reproducción, Guardado y Subida de Video -->
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <div style="display:flex;align-items:center;gap:12px;">
               <button (click)="togglePlayback()" 
@@ -227,21 +219,16 @@ interface PreloadedDemo {
                 }
               </div>
 
-              <!-- Botón Reproducir Demo Precargada Actual -->
-              @if (!hasCustomVideo) {
-                <button (click)="playCurrentPreloadedDemo()"
-                  style="display:flex;align-items:center;gap:6px;background:rgba(0,244,237,0.15);border:1px solid #00f4ed;color:#00f4ed;font-weight:700;font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;">
-                  <span>▶ REPRODUCIR VIDEO PRECARGADO</span>
-                </button>
-              } @else {
-                <button (click)="resetToStandby()"
-                  style="display:flex;align-items:center;gap:6px;background:rgba(239,68,68,0.15);border:1px solid #ef4444;color:#ef4444;font-weight:700;font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;">
-                  <span>✕ DETENER Y REGRESAR A ESTADO INICIAL</span>
+              @if (hasCustomVideo) {
+                <button (click)="deleteCurrentParameterVideo()"
+                  title="Elimina el video vinculado a este parámetro y regresa a pantalla de espera"
+                  style="display:flex;align-items:center;gap:4px;background:rgba(239,68,68,0.15);border:1px solid #ef4444;color:#ef4444;font-weight:700;font-size:10px;padding:4px 8px;border-radius:6px;cursor:pointer;">
+                  <span>✕ QUITAR VIDEO DE ESTE PARÁMETRO</span>
                 </button>
               }
             </div>
 
-            <!-- Botón Subir Video Propio -->
+            <!-- Botón Subir/Vincular Video para este Parámetro -->
             <div style="display:flex;align-items:center;gap:8px;">
               <input #fileInput type="file" accept="video/mp4,video/mkv,video/avi,video/webm" (change)="onFileSelected($event)" style="display:none;" />
               <button (click)="fileInput.click()"
@@ -249,7 +236,7 @@ interface PreloadedDemo {
                 <svg style="width:14px;height:14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
-                <span>SUBIR OTRO VIDEO (.MP4)</span>
+                <span>{{ hasCustomVideo ? 'CAMBIAR VIDEO DE ESTE PARÁMETRO (.MP4)' : 'SUBIR VIDEO PARA ESTE PARÁMETRO (.MP4)' }}</span>
               </button>
             </div>
           </div>
@@ -279,49 +266,6 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   private detectedBoxes: DetectedBox[] = [];
   private lastInferenceTime = 0;
 
-  readonly preloadedDemos: Record<string, PreloadedDemo> = {
-    'people_count': {
-      pipeline: 'people_count',
-      title: 'Conteo y Aforo en Tránsito Peatonal',
-      fileName: 'CANT_PERSONAS_39837-424368872.mp4',
-      videoUrl: '',
-      description: 'Detección de 5 personas con cruce de línea virtual y aforo dinámico.',
-      badge: '5 Personas Identificadas'
-    },
-    'sector_density': {
-      pipeline: 'sector_density',
-      title: 'Ocupación y Densidad por Sectores',
-      fileName: 'DENSIDAD_SECTORES_ABC.mp4',
-      videoUrl: '',
-      description: 'Control de cuadrantes en Sector A (Izquierda), B (Centro) y C (Derecha).',
-      badge: '3 Sectores Monitoreados'
-    },
-    'visible_attributes': {
-      pipeline: 'visible_attributes',
-      title: 'Lentes, Gorra y Mascarilla Facial',
-      fileName: 'ATRIBUTOS_FACIALES_LENTES_GORRA.mp4',
-      videoUrl: '',
-      description: 'Identificación óptica de lentes oftálmicos en centro (98%) y rostro despejado.',
-      badge: 'Lentes Oftálmicos Detectados'
-    },
-    'safety_fall': {
-      pipeline: 'safety_fall',
-      title: 'Estabilidad y Caída de Operario (Pose)',
-      fileName: 'PERSONA_CAE_istockphoto-1066783428-640_adpp_is.mp4',
-      videoUrl: '',
-      description: 'Detección automática de caída biomecánica (ángulo 14.5° < 35° en suelo).',
-      badge: 'Alerta Crítica: Caída en Suelo'
-    },
-    'safety_ppe': {
-      pipeline: 'safety_ppe',
-      title: 'Inspección de EPP (Casco y Chaleco)',
-      fileName: 'EPP_CASCO_CHALECO_SEGURIDAD.mp4',
-      videoUrl: '',
-      description: 'Verificación de cumplimiento de elementos de protección personal.',
-      badge: 'Casco y Chaleco OK'
-    }
-  };
-
   readonly incidentMarkers: IncidentMarker[] = [
     { timeSeconds: 4, percentage: 11.7, label: 'Tracking Articular y Postura', type: 'info' },
     { timeSeconds: 8, percentage: 23.5, label: 'ALERTA: Caída Detectada (14°)', type: 'danger' },
@@ -330,7 +274,8 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
 
   constructor(
     public state: PipelineStateService,
-    private apiService: ApiService
+    private apiService: ApiService,
+    private videoStorage: VideoStorageService
   ) {}
 
   ngOnInit() {
@@ -341,6 +286,8 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngAfterViewInit() {
     this.startCanvasRenderer();
+    // Cargar automáticamente el video guardado para el parámetro inicial
+    this.loadVideoForActiveParameter();
   }
 
   ngOnDestroy() {
@@ -388,12 +335,21 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
-  onFileSelected(event: any) {
+  /**
+   * Al subir un video, se guarda permanentemente en IndexedDB asociado al parámetro activo
+   */
+  async onFileSelected(event: any) {
     const file: File = event.target.files[0];
     if (file && this.videoElement) {
+      const activePip = this.state.activePipeline();
       this.currentDemoName = file.name;
       this.hasCustomVideo = true;
       this.detectedBoxes = [];
+
+      // 1. Guardar permanentemente en IndexedDB en el navegador
+      await this.videoStorage.saveVideoForParameter(activePip, file);
+
+      // 2. Reproducir inmediatamente en el reproductor
       const objectUrl = URL.createObjectURL(file);
       this.videoElement.src = objectUrl;
       this.videoElement.play().then(() => {
@@ -401,6 +357,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
         this.state.setMode('forensic');
       }).catch(() => {});
 
+      // 3. Enviar al backend para registro forense
       const formData = new FormData();
       formData.append('video', file);
       this.apiService.uploadForensicVideo(formData).subscribe();
@@ -408,41 +365,43 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * Al seleccionar otro parámetro, se detiene el video previo y se regresa a estado inicial
+   * Cambiar de parámetro: busca si ya existe un video guardado para él.
+   * Si existe, lo reproduce de inmediato. Si no, limpia la pantalla a estado inicial (Aforo 0).
    */
-  setScenario(pipeline: string) {
+  async switchParameter(pipeline: string) {
     this.state.setPipeline(pipeline);
-    this.resetToStandby();
+    await this.loadVideoForActiveParameter();
   }
 
   /**
-   * Selecciona el escenario y reproduce inmediatamente el video precargado
+   * Carga el video guardado para el parámetro activo
    */
-  selectScenarioAndPlay(pipeline: string) {
-    this.state.setPipeline(pipeline);
-    this.playPreloadedDemo(pipeline);
-  }
+  async loadVideoForActiveParameter() {
+    const activePip = this.state.activePipeline();
+    const stored = await this.videoStorage.getVideoForParameter(activePip);
 
-  playCurrentPreloadedDemo() {
-    this.playPreloadedDemo(this.state.activePipeline());
-  }
-
-  playPreloadedDemo(pipeline: string) {
-    const demo = this.preloadedDemos[pipeline] || this.preloadedDemos['people_count'];
-    this.currentDemoName = demo.fileName;
-    this.hasCustomVideo = true;
-    this.isPlaying = true;
-    this.currentTimeSec = 0;
-    this.totalDurationSec = 34;
-    this.forensicProgress = 0;
-
-    if (this.videoElement) {
-      if (demo.videoUrl) {
-        this.videoElement.src = demo.videoUrl;
-        this.videoElement.play().catch(() => {});
-      }
+    if (stored && stored.objectUrl && this.videoElement) {
+      this.currentDemoName = stored.fileName;
+      this.hasCustomVideo = true;
+      this.detectedBoxes = [];
+      this.videoElement.src = stored.objectUrl;
+      this.videoElement.play().then(() => {
+        this.isPlaying = true;
+      }).catch(() => {});
+      this.checkDynamicAlerts();
+    } else {
+      // No hay video guardado para este parámetro: limpiar a estado inicial
+      this.resetToStandby();
     }
-    this.checkDynamicAlerts();
+  }
+
+  /**
+   * Elimina el video guardado para el parámetro actual y limpia la pantalla
+   */
+  async deleteCurrentParameterVideo() {
+    const activePip = this.state.activePipeline();
+    await this.videoStorage.deleteVideoForParameter(activePip);
+    this.resetToStandby();
   }
 
   /**
@@ -470,10 +429,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   togglePlayback() {
-    if (!this.hasCustomVideo) {
-      this.playCurrentPreloadedDemo();
-      return;
-    }
+    if (!this.hasCustomVideo) return;
     this.isPlaying = !this.isPlaying;
     if (this.videoElement && this.videoElement.src) {
       if (this.isPlaying) {
@@ -556,7 +512,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
         subtipo: 'conteo_personas',
         confianza: 0.98,
         metadata: {
-          sujeto: `5 Personas Identificadas`,
+          sujeto: `${count || 5} Personas Identificadas`,
           criterio: 'Detección Neural YOLO/COCO + ByteTrack',
           zona: 'Campo Visual Peatonal'
         }
@@ -641,7 +597,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
       } catch (err) {}
     }
 
-    // Adaptación a los escenarios precargados
+    // Adaptación a los escenarios con video activo
     const pip = this.state.activePipeline();
     if (pip === 'safety_fall' || this.currentDemoName.toLowerCase().includes('cae')) {
       this.detectedBoxes = [
@@ -748,20 +704,15 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
       const h = canvas.height;
       const activePip = this.state.activePipeline();
 
-      // Detección de cambio de parámetro para reset automático a standby
+      // Detección de cambio de parámetro para cargar video guardado o resetear
       if (this.previousPipeline && this.previousPipeline !== activePip) {
-        this.resetToStandby();
+        this.loadVideoForActiveParameter();
       }
       this.previousPipeline = activePip;
 
       // 1. Dibujar el Frame de Video Real o Pantalla de Standby Limpia
-      if (this.hasCustomVideo) {
-        if (this.videoElement && this.videoElement.src && this.videoElement.readyState >= 2) {
-          ctx.drawImage(this.videoElement, 0, 0, w, h);
-        } else {
-          // Render de fondo del video precargado
-          this.renderPreloadedVideoBackground(ctx, w, h, activePip);
-        }
+      if (this.hasCustomVideo && this.videoElement && this.videoElement.src && this.videoElement.readyState >= 2) {
+        ctx.drawImage(this.videoElement, 0, 0, w, h);
         
         // Ejecutar inferencia únicamente cuando hay video activo
         this.executeNeuralInference(w, h);
@@ -801,62 +752,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * Render de entorno visual para los videos de demostración precargados
-   */
-  private renderPreloadedVideoBackground(ctx: CanvasRenderingContext2D, w: number, h: number, pip: string) {
-    if (pip === 'safety_fall' || this.currentDemoName.toLowerCase().includes('cae')) {
-      // Escena de Piso Industrial
-      const grad = ctx.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, '#555b63');
-      grad.addColorStop(0.3, '#7d848d');
-      grad.addColorStop(0.8, '#9da3ab');
-      grad.addColorStop(1, '#697078');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, w, h);
-
-      // Columna amarilla de seguridad a la izquierda
-      ctx.fillStyle = '#facc15';
-      ctx.fillRect(w * 0.22, 0, 36, h * 0.45);
-      ctx.fillStyle = '#111827';
-      ctx.fillRect(w * 0.04, h * 0.15, w * 0.16, h * 0.65);
-
-      // Línea de suelo
-      ctx.strokeStyle = '#eab308';
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      ctx.moveTo(w * 0.05, h * 0.50);
-      ctx.lineTo(w * 0.35, h * 0.65);
-      ctx.stroke();
-
-      // Silueta de operario caído en overol azul
-      ctx.fillStyle = '#2563eb';
-      ctx.beginPath();
-      ctx.ellipse(w * 0.58, h * 0.46, w * 0.16, h * 0.10, -0.15, 0, Math.PI * 2);
-      ctx.fill();
-
-    } else {
-      // Escena de Calle Peatonal
-      const grad = ctx.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, '#2d3748');
-      grad.addColorStop(0.4, '#4a5568');
-      grad.addColorStop(0.7, '#718096');
-      grad.addColorStop(1, '#2d3748');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, w, h);
-
-      // Edificios y Calzada
-      ctx.fillStyle = '#1a202c';
-      ctx.fillRect(0, 0, w * 0.20, h * 0.45);
-      ctx.fillRect(w * 0.80, 0, w * 0.20, h * 0.45);
-
-      // Calzada de concreto
-      ctx.fillStyle = '#4a5568';
-      ctx.fillRect(w * 0.15, h * 0.40, w * 0.70, h * 0.60);
-    }
-  }
-
-  /**
-   * Pantalla de Espera Limpia con Selector de Demos Precargadas (Aforo 0)
+   * Pantalla de Espera Limpia (Aforo 0) cuando no hay video vinculado al parámetro
    */
   private renderStandbyScreen(ctx: CanvasRenderingContext2D, w: number, h: number) {
     const grad = ctx.createLinearGradient(0, 0, 0, h);
@@ -876,9 +772,6 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
       ctx.stroke();
     }
 
-    const pip = this.state.activePipeline();
-    const demo = this.preloadedDemos[pip] || this.preloadedDemos['people_count'];
-
     // Panel Central de Espera
     ctx.fillStyle = 'rgba(26, 39, 48, 0.90)';
     ctx.fillRect(w * 0.24, h * 0.28, w * 0.52, h * 0.44);
@@ -893,25 +786,25 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
 
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 13px JetBrains Mono, monospace';
-    ctx.fillText(`PARÁMETRO ACTIVO: ${this.getPipelineLabel()}`, w * 0.50, h * 0.43);
-
-    ctx.fillStyle = '#34d399';
-    ctx.font = '11px JetBrains Mono, monospace';
-    ctx.fillText(`[✓] VIDEO PRECARGADO DISPONIBLE: ${demo.fileName}`, w * 0.50, h * 0.49);
+    ctx.fillText(`PARÁMETRO SELECCIONADO: ${this.getPipelineLabel()}`, w * 0.50, h * 0.43);
 
     ctx.fillStyle = '#9ca3af';
+    ctx.font = '11px JetBrains Mono, monospace';
+    ctx.fillText('Aún no has subido un video para este parámetro.', w * 0.50, h * 0.49);
+
+    ctx.fillStyle = '#00f4ed';
     ctx.font = '10px JetBrains Mono, monospace';
-    ctx.fillText(demo.description, w * 0.50, h * 0.55);
+    ctx.fillText('Al subirlo quedará guardado permanentemente para este parámetro.', w * 0.50, h * 0.54);
 
     // Botón sugerido
     ctx.fillStyle = 'rgba(0, 244, 237, 0.15)';
-    ctx.fillRect(w * 0.32, h * 0.60, w * 0.36, 32);
+    ctx.fillRect(w * 0.28, h * 0.59, w * 0.44, 32);
     ctx.strokeStyle = '#00f4ed';
-    ctx.strokeRect(w * 0.32, h * 0.60, w * 0.36, 32);
+    ctx.strokeRect(w * 0.28, h * 0.59, w * 0.44, 32);
 
     ctx.fillStyle = '#00f4ed';
     ctx.font = 'bold 11px JetBrains Mono, monospace';
-    ctx.fillText('▶ HAZ CLIC EN LA BARRA INFERIOR PARA REPRODUCIR', w * 0.50, h * 0.60 + 20);
+    ctx.fillText('📁 HAZ CLIC EN "SUBIR VIDEO" EN LA BARRA INFERIOR', w * 0.50, h * 0.59 + 20);
 
     ctx.textAlign = 'left';
 
