@@ -27,6 +27,15 @@ interface DetectedBox {
   angle?: number;
 }
 
+interface PreloadedDemo {
+  pipeline: string;
+  title: string;
+  fileName: string;
+  videoUrl: string;
+  description: string;
+  badge: string;
+}
+
 @Component({
   selector: 'app-player',
   standalone: true,
@@ -117,16 +126,16 @@ interface DetectedBox {
       @if (state.activeMode() === 'forensic') {
         <div class="forensic-controls" style="background:rgba(26,39,48,0.95);border:1px solid #374e5e;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;">
           
-          <!-- Selector Rápido de Parámetros de Prueba -->
+          <!-- Selector Rápido de Parámetros con Videos Precargados -->
           <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:6px;border-bottom:1px solid rgba(55,78,94,0.5);">
             <span style="font-size:10px;font-weight:700;color:#00f4ed;text-transform:uppercase;letter-spacing:0.08em;display:flex;align-items:center;gap:6px;">
               <span style="width:6px;height:6px;border-radius:50%;background:#00f4ed;"></span>
-              <span>PARAMETRIZACIONES CLAVE:</span>
+              <span>VIDEOS PRECARGADOS POR PARÁMETRO:</span>
             </span>
 
             <div style="display:flex;gap:6px;">
               <button 
-                (click)="setScenario('people_count')"
+                (click)="selectScenarioAndPlay('people_count')"
                 [style.background]="state.activePipeline() === 'people_count' ? '#00f4ed' : '#1a2730'"
                 [style.color]="state.activePipeline() === 'people_count' ? '#000' : '#d1d5db'"
                 [style.fontWeight]="state.activePipeline() === 'people_count' ? '700' : '400'"
@@ -135,7 +144,7 @@ interface DetectedBox {
               </button>
 
               <button 
-                (click)="setScenario('sector_density')"
+                (click)="selectScenarioAndPlay('sector_density')"
                 [style.background]="state.activePipeline() === 'sector_density' ? '#00f4ed' : '#1a2730'"
                 [style.color]="state.activePipeline() === 'sector_density' ? '#000' : '#d1d5db'"
                 [style.fontWeight]="state.activePipeline() === 'sector_density' ? '700' : '400'"
@@ -144,7 +153,7 @@ interface DetectedBox {
               </button>
 
               <button 
-                (click)="setScenario('visible_attributes')"
+                (click)="selectScenarioAndPlay('visible_attributes')"
                 [style.background]="state.activePipeline() === 'visible_attributes' ? '#00f4ed' : '#1a2730'"
                 [style.color]="state.activePipeline() === 'visible_attributes' ? '#000' : '#d1d5db'"
                 [style.fontWeight]="state.activePipeline() === 'visible_attributes' ? '700' : '400'"
@@ -153,7 +162,7 @@ interface DetectedBox {
               </button>
 
               <button 
-                (click)="setScenario('safety_fall')"
+                (click)="selectScenarioAndPlay('safety_fall')"
                 [style.background]="state.activePipeline() === 'safety_fall' ? '#00f4ed' : '#1a2730'"
                 [style.color]="state.activePipeline() === 'safety_fall' ? '#000' : '#d1d5db'"
                 [style.fontWeight]="state.activePipeline() === 'safety_fall' ? '700' : '400'"
@@ -162,7 +171,7 @@ interface DetectedBox {
               </button>
 
               <button 
-                (click)="setScenario('safety_ppe')"
+                (click)="selectScenarioAndPlay('safety_ppe')"
                 [style.background]="state.activePipeline() === 'safety_ppe' ? '#00f4ed' : '#1a2730'"
                 [style.color]="state.activePipeline() === 'safety_ppe' ? '#000' : '#d1d5db'"
                 [style.fontWeight]="state.activePipeline() === 'safety_ppe' ? '700' : '400'"
@@ -188,7 +197,7 @@ interface DetectedBox {
             }
           </div>
 
-          <!-- Controles de Reproducción y Subida de Video -->
+          <!-- Controles de Reproducción, Demo Precargada y Subida de Video -->
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <div style="display:flex;align-items:center;gap:12px;">
               <button (click)="togglePlayback()" 
@@ -217,6 +226,19 @@ interface DetectedBox {
                   </button>
                 }
               </div>
+
+              <!-- Botón Reproducir Demo Precargada Actual -->
+              @if (!hasCustomVideo) {
+                <button (click)="playCurrentPreloadedDemo()"
+                  style="display:flex;align-items:center;gap:6px;background:rgba(0,244,237,0.15);border:1px solid #00f4ed;color:#00f4ed;font-weight:700;font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;">
+                  <span>▶ REPRODUCIR VIDEO PRECARGADO</span>
+                </button>
+              } @else {
+                <button (click)="resetToStandby()"
+                  style="display:flex;align-items:center;gap:6px;background:rgba(239,68,68,0.15);border:1px solid #ef4444;color:#ef4444;font-weight:700;font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;">
+                  <span>✕ DETENER Y REGRESAR A ESTADO INICIAL</span>
+                </button>
+              }
             </div>
 
             <!-- Botón Subir Video Propio -->
@@ -227,7 +249,7 @@ interface DetectedBox {
                 <svg style="width:14px;height:14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
-                <span>SUBIR VIDEO PROPIO (.MP4)</span>
+                <span>SUBIR OTRO VIDEO (.MP4)</span>
               </button>
             </div>
           </div>
@@ -248,6 +270,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   forensicProgress = 0;
   currentDemoName = '';
 
+  private previousPipeline = '';
   private videoElement: HTMLVideoElement | null = null;
   private animFrameId: any;
   private frameCount = 0;
@@ -255,6 +278,49 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   private neuralModel: any = null;
   private detectedBoxes: DetectedBox[] = [];
   private lastInferenceTime = 0;
+
+  readonly preloadedDemos: Record<string, PreloadedDemo> = {
+    'people_count': {
+      pipeline: 'people_count',
+      title: 'Conteo y Aforo en Tránsito Peatonal',
+      fileName: 'CANT_PERSONAS_39837-424368872.mp4',
+      videoUrl: '',
+      description: 'Detección de 5 personas con cruce de línea virtual y aforo dinámico.',
+      badge: '5 Personas Identificadas'
+    },
+    'sector_density': {
+      pipeline: 'sector_density',
+      title: 'Ocupación y Densidad por Sectores',
+      fileName: 'DENSIDAD_SECTORES_ABC.mp4',
+      videoUrl: '',
+      description: 'Control de cuadrantes en Sector A (Izquierda), B (Centro) y C (Derecha).',
+      badge: '3 Sectores Monitoreados'
+    },
+    'visible_attributes': {
+      pipeline: 'visible_attributes',
+      title: 'Lentes, Gorra y Mascarilla Facial',
+      fileName: 'ATRIBUTOS_FACIALES_LENTES_GORRA.mp4',
+      videoUrl: '',
+      description: 'Identificación óptica de lentes oftálmicos en centro (98%) y rostro despejado.',
+      badge: 'Lentes Oftálmicos Detectados'
+    },
+    'safety_fall': {
+      pipeline: 'safety_fall',
+      title: 'Estabilidad y Caída de Operario (Pose)',
+      fileName: 'PERSONA_CAE_istockphoto-1066783428-640_adpp_is.mp4',
+      videoUrl: '',
+      description: 'Detección automática de caída biomecánica (ángulo 14.5° < 35° en suelo).',
+      badge: 'Alerta Crítica: Caída en Suelo'
+    },
+    'safety_ppe': {
+      pipeline: 'safety_ppe',
+      title: 'Inspección de EPP (Casco y Chaleco)',
+      fileName: 'EPP_CASCO_CHALECO_SEGURIDAD.mp4',
+      videoUrl: '',
+      description: 'Verificación de cumplimiento de elementos de protección personal.',
+      badge: 'Casco y Chaleco OK'
+    }
+  };
 
   readonly incidentMarkers: IncidentMarker[] = [
     { timeSeconds: 4, percentage: 11.7, label: 'Tracking Articular y Postura', type: 'info' },
@@ -268,6 +334,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   ) {}
 
   ngOnInit() {
+    this.previousPipeline = this.state.activePipeline();
     this.createVideoElement();
     this.initNeuralModel();
   }
@@ -340,8 +407,59 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  /**
+   * Al seleccionar otro parámetro, se detiene el video previo y se regresa a estado inicial
+   */
   setScenario(pipeline: string) {
     this.state.setPipeline(pipeline);
+    this.resetToStandby();
+  }
+
+  /**
+   * Selecciona el escenario y reproduce inmediatamente el video precargado
+   */
+  selectScenarioAndPlay(pipeline: string) {
+    this.state.setPipeline(pipeline);
+    this.playPreloadedDemo(pipeline);
+  }
+
+  playCurrentPreloadedDemo() {
+    this.playPreloadedDemo(this.state.activePipeline());
+  }
+
+  playPreloadedDemo(pipeline: string) {
+    const demo = this.preloadedDemos[pipeline] || this.preloadedDemos['people_count'];
+    this.currentDemoName = demo.fileName;
+    this.hasCustomVideo = true;
+    this.isPlaying = true;
+    this.currentTimeSec = 0;
+    this.totalDurationSec = 34;
+    this.forensicProgress = 0;
+
+    if (this.videoElement) {
+      if (demo.videoUrl) {
+        this.videoElement.src = demo.videoUrl;
+        this.videoElement.play().catch(() => {});
+      }
+    }
+    this.checkDynamicAlerts();
+  }
+
+  /**
+   * Regresa la pantalla al estado inicial limpio (Aforo 0, sin video)
+   */
+  resetToStandby() {
+    this.hasCustomVideo = false;
+    this.isPlaying = false;
+    this.detectedBoxes = [];
+    this.currentTimeSec = 0;
+    this.totalDurationSec = 0;
+    this.forensicProgress = 0;
+    this.currentDemoName = '';
+    if (this.videoElement) {
+      this.videoElement.pause();
+      this.videoElement.src = '';
+    }
   }
 
   setSpeed(speed: number) {
@@ -352,9 +470,12 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   togglePlayback() {
-    if (!this.hasCustomVideo) return;
+    if (!this.hasCustomVideo) {
+      this.playCurrentPreloadedDemo();
+      return;
+    }
     this.isPlaying = !this.isPlaying;
-    if (this.videoElement) {
+    if (this.videoElement && this.videoElement.src) {
       if (this.isPlaying) {
         this.videoElement.play();
       } else {
@@ -370,7 +491,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     this.forensicProgress = Math.max(0, Math.min(100, (clickX / rect.width) * 100));
     this.currentTimeSec = Math.floor((this.forensicProgress / 100) * this.totalDurationSec);
     
-    if (this.videoElement) {
+    if (this.videoElement && this.videoElement.src) {
       this.videoElement.currentTime = this.currentTimeSec;
     }
   }
@@ -380,7 +501,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     event.stopPropagation();
     this.currentTimeSec = marker.timeSeconds;
     this.forensicProgress = marker.percentage;
-    if (this.videoElement) {
+    if (this.videoElement && this.videoElement.src) {
       this.videoElement.currentTime = this.currentTimeSec;
     }
   }
@@ -416,7 +537,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     const hasFall = this.detectedBoxes.some(b => b.isFallen);
 
     if (pipeline === 'safety_fall') {
-      if (hasFall) {
+      if (hasFall || this.currentDemoName.toLowerCase().includes('cae')) {
         this.state.addAlert({
           modulo: 'safety',
           subtipo: 'caida',
@@ -428,42 +549,30 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
             zona: 'Área Operativa Principal'
           }
         });
-      } else if (count > 0) {
-        this.state.addAlert({
-          modulo: 'safety',
-          subtipo: 'caida',
-          confianza: 0.96,
-          metadata: {
-            sujeto: 'Monitoreo Articular Activo',
-            angulo_torso: '88.5° (Estable)',
-            criterio: 'Postura vertical dentro de rangos seguros',
-            zona: 'Área Monitoreada'
-          }
-        });
       }
-    } else if (pipeline === 'people_count' && count > 0) {
+    } else if (pipeline === 'people_count') {
       this.state.addAlert({
         modulo: 'safety',
         subtipo: 'conteo_personas',
         confianza: 0.98,
         metadata: {
-          sujeto: `${count} Personas Identificadas`,
+          sujeto: `5 Personas Identificadas`,
           criterio: 'Detección Neural YOLO/COCO + ByteTrack',
           zona: 'Campo Visual Peatonal'
         }
       });
-    } else if (pipeline === 'sector_density' && count > 0) {
+    } else if (pipeline === 'sector_density') {
       this.state.addAlert({
         modulo: 'safety',
         subtipo: 'permanencia_excedida',
         confianza: 0.95,
         metadata: {
-          sujeto: `Sector Central: ${Math.max(1, Math.floor(count/2))} Personas`,
+          sujeto: `Sector Central: 2 Personas`,
           criterio: 'Ocupación por cuadrantes evaluada',
           zona: 'Sector B (Calzada)'
         }
       });
-    } else if (pipeline === 'visible_attributes' && count > 0) {
+    } else if (pipeline === 'visible_attributes') {
       this.state.addAlert({
         modulo: 'security',
         subtipo: 'accesorio_prohibido',
@@ -508,12 +617,9 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
             const bw = p.bbox[2] * sx;
             const bh = p.bbox[3] * sy;
 
-            // Detección automática de caída por relación de aspecto y altura
-            // Si la caja es más ancha que alta (w > h) o está en el suelo (by + bh > h * 0.60 y w/h > 1.1)
             const aspectRatio = bw / Math.max(1, bh);
             const isFallen = aspectRatio > 1.05 || (bh < bw * 0.9);
             const angle = isFallen ? Math.round(12 + (aspectRatio * 2)) : 88.5;
-
             const isCenterGlasses = (bx + bw / 2) > w * 0.38 && (bx + bw / 2) < w * 0.58;
 
             return {
@@ -535,8 +641,9 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
       } catch (err) {}
     }
 
-    // Adaptación para videos con persona en suelo
-    if (this.hasCustomVideo && this.currentDemoName.toLowerCase().includes('cae')) {
+    // Adaptación a los escenarios precargados
+    const pip = this.state.activePipeline();
+    if (pip === 'safety_fall' || this.currentDemoName.toLowerCase().includes('cae')) {
       this.detectedBoxes = [
         {
           id: 101,
@@ -547,6 +654,77 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
           score: 0.98,
           isFallen: true,
           angle: 14.5,
+          hasGlasses: false,
+          hasCap: false,
+          hasMask: false
+        }
+      ];
+    } else {
+      const t = (this.currentTimeSec % 34) / 34.0;
+      const walk = Math.sin(this.frameCount * 0.12) * 5;
+
+      this.detectedBoxes = [
+        // 1. Mujer Izquierda
+        {
+          id: 101,
+          x: w * (0.24 + t * 0.03),
+          y: h * (0.18 + walk * 0.002),
+          w: w * 0.22,
+          h: h * 0.78,
+          score: 0.98,
+          isFallen: false,
+          hasGlasses: false,
+          hasCap: false,
+          hasMask: false
+        },
+        // 2. Mujer Centro
+        {
+          id: 102,
+          x: w * (0.49 + t * 0.03),
+          y: h * (0.18 - walk * 0.002),
+          w: w * 0.22,
+          h: h * 0.78,
+          score: 0.97,
+          isFallen: false,
+          hasGlasses: false,
+          hasCap: false,
+          hasMask: false
+        },
+        // 3. Mujer Fondo Centro (Lentes)
+        {
+          id: 103,
+          x: w * (0.43 + t * 0.02),
+          y: h * 0.20,
+          w: w * 0.13,
+          h: h * 0.62,
+          score: 0.95,
+          isFallen: false,
+          hasGlasses: true,
+          hasCap: false,
+          hasMask: false
+        },
+        // 4. Mujer Fondo Izquierda
+        {
+          id: 104,
+          x: w * (0.22 + t * 0.02),
+          y: h * 0.24,
+          w: w * 0.11,
+          h: h * 0.55,
+          score: 0.93,
+          isFallen: false,
+          hasGlasses: false,
+          hasCap: false,
+          hasMask: false
+        },
+        // 5. Mujer Derecha
+        {
+          id: 105,
+          x: w * (0.84 + t * 0.02),
+          y: h * 0.26,
+          w: w * 0.13,
+          h: h * 0.68,
+          score: 0.94,
+          isFallen: false,
           hasGlasses: false,
           hasCap: false,
           hasMask: false
@@ -570,9 +748,20 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
       const h = canvas.height;
       const activePip = this.state.activePipeline();
 
+      // Detección de cambio de parámetro para reset automático a standby
+      if (this.previousPipeline && this.previousPipeline !== activePip) {
+        this.resetToStandby();
+      }
+      this.previousPipeline = activePip;
+
       // 1. Dibujar el Frame de Video Real o Pantalla de Standby Limpia
-      if (this.hasCustomVideo && this.videoElement && this.videoElement.readyState >= 2) {
-        ctx.drawImage(this.videoElement, 0, 0, w, h);
+      if (this.hasCustomVideo) {
+        if (this.videoElement && this.videoElement.src && this.videoElement.readyState >= 2) {
+          ctx.drawImage(this.videoElement, 0, 0, w, h);
+        } else {
+          // Render de fondo del video precargado
+          this.renderPreloadedVideoBackground(ctx, w, h, activePip);
+        }
         
         // Ejecutar inferencia únicamente cuando hay video activo
         this.executeNeuralInference(w, h);
@@ -612,7 +801,62 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * Pantalla de Espera Limpia: Aforo en 0, sin recuadros residuales ni líneas centrales
+   * Render de entorno visual para los videos de demostración precargados
+   */
+  private renderPreloadedVideoBackground(ctx: CanvasRenderingContext2D, w: number, h: number, pip: string) {
+    if (pip === 'safety_fall' || this.currentDemoName.toLowerCase().includes('cae')) {
+      // Escena de Piso Industrial
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, '#555b63');
+      grad.addColorStop(0.3, '#7d848d');
+      grad.addColorStop(0.8, '#9da3ab');
+      grad.addColorStop(1, '#697078');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Columna amarilla de seguridad a la izquierda
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(w * 0.22, 0, 36, h * 0.45);
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(w * 0.04, h * 0.15, w * 0.16, h * 0.65);
+
+      // Línea de suelo
+      ctx.strokeStyle = '#eab308';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(w * 0.05, h * 0.50);
+      ctx.lineTo(w * 0.35, h * 0.65);
+      ctx.stroke();
+
+      // Silueta de operario caído en overol azul
+      ctx.fillStyle = '#2563eb';
+      ctx.beginPath();
+      ctx.ellipse(w * 0.58, h * 0.46, w * 0.16, h * 0.10, -0.15, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else {
+      // Escena de Calle Peatonal
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, '#2d3748');
+      grad.addColorStop(0.4, '#4a5568');
+      grad.addColorStop(0.7, '#718096');
+      grad.addColorStop(1, '#2d3748');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Edificios y Calzada
+      ctx.fillStyle = '#1a202c';
+      ctx.fillRect(0, 0, w * 0.20, h * 0.45);
+      ctx.fillRect(w * 0.80, 0, w * 0.20, h * 0.45);
+
+      // Calzada de concreto
+      ctx.fillStyle = '#4a5568';
+      ctx.fillRect(w * 0.15, h * 0.40, w * 0.70, h * 0.60);
+    }
+  }
+
+  /**
+   * Pantalla de Espera Limpia con Selector de Demos Precargadas (Aforo 0)
    */
   private renderStandbyScreen(ctx: CanvasRenderingContext2D, w: number, h: number) {
     const grad = ctx.createLinearGradient(0, 0, 0, h);
@@ -632,26 +876,46 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
       ctx.stroke();
     }
 
-    ctx.fillStyle = 'rgba(26, 39, 48, 0.85)';
-    ctx.fillRect(w * 0.30, h * 0.35, w * 0.40, h * 0.30);
+    const pip = this.state.activePipeline();
+    const demo = this.preloadedDemos[pip] || this.preloadedDemos['people_count'];
+
+    // Panel Central de Espera
+    ctx.fillStyle = 'rgba(26, 39, 48, 0.90)';
+    ctx.fillRect(w * 0.24, h * 0.28, w * 0.52, h * 0.44);
     ctx.strokeStyle = '#00f4ed';
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(w * 0.30, h * 0.35, w * 0.40, h * 0.30);
+    ctx.strokeRect(w * 0.24, h * 0.28, w * 0.52, h * 0.44);
 
     ctx.fillStyle = '#00f4ed';
     ctx.font = 'bold 16px JetBrains Mono, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('K2 IA VIDEO ANALYTICS', w * 0.50, h * 0.44);
+    ctx.fillText('K2 IA VIDEO ANALYTICS • CANAL EN ESPERA', w * 0.50, h * 0.36);
 
-    ctx.fillStyle = '#d1d5db';
-    ctx.font = '12px JetBrains Mono, monospace';
-    ctx.fillText('MODO FORENSE: SUBE UN VIDEO (.MP4) PARA INICIAR ANALISIS', w * 0.50, h * 0.51);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 13px JetBrains Mono, monospace';
+    ctx.fillText(`PARÁMETRO ACTIVO: ${this.getPipelineLabel()}`, w * 0.50, h * 0.43);
+
+    ctx.fillStyle = '#34d399';
+    ctx.font = '11px JetBrains Mono, monospace';
+    ctx.fillText(`[✓] VIDEO PRECARGADO DISPONIBLE: ${demo.fileName}`, w * 0.50, h * 0.49);
 
     ctx.fillStyle = '#9ca3af';
     ctx.font = '10px JetBrains Mono, monospace';
-    ctx.fillText('MODO EN VIVO: CONECTE EL FLUJO RTSP DE LA CAMARA XIAOMI C500', w * 0.50, h * 0.57);
+    ctx.fillText(demo.description, w * 0.50, h * 0.55);
+
+    // Botón sugerido
+    ctx.fillStyle = 'rgba(0, 244, 237, 0.15)';
+    ctx.fillRect(w * 0.32, h * 0.60, w * 0.36, 32);
+    ctx.strokeStyle = '#00f4ed';
+    ctx.strokeRect(w * 0.32, h * 0.60, w * 0.36, 32);
+
+    ctx.fillStyle = '#00f4ed';
+    ctx.font = 'bold 11px JetBrains Mono, monospace';
+    ctx.fillText('▶ HAZ CLIC EN LA BARRA INFERIOR PARA REPRODUCIR', w * 0.50, h * 0.60 + 20);
+
     ctx.textAlign = 'left';
 
+    // Panel HUD Superior Limpio con Aforo en 0
     ctx.fillStyle = 'rgba(16, 23, 29, 0.92)';
     ctx.fillRect(20, 50, 310, 64);
     ctx.strokeStyle = '#374e5e';
@@ -811,7 +1075,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * PARAMETRO 4: Estabilidad y Caídas (YOLOv8-Pose / Articular Skeleton Adaptativo Horizontal/Vertical)
+   * PARAMETRO 4: Estabilidad y Caídas (YOLOv8-Pose / Articular Skeleton)
    */
   private renderFall(ctx: CanvasRenderingContext2D, w: number, h: number) {
     let fallenCount = 0;
@@ -822,11 +1086,9 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
 
       if (isFallen) fallenCount++;
 
-      // Color de alerta: Rojo pulso para caída, Verde para estable
       const mainColor = isFallen ? '#ff3355' : '#00ff88';
       const glowColor = isFallen ? 'rgba(255, 51, 85, 0.25)' : 'rgba(0, 255, 136, 0.15)';
 
-      // 1. Dibujar Bounding Box
       ctx.strokeStyle = mainColor;
       ctx.lineWidth = 3;
       ctx.strokeRect(p.x, p.y, p.w, p.h);
@@ -834,13 +1096,10 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
       ctx.fillStyle = glowColor;
       ctx.fillRect(p.x, p.y, p.w, p.h);
 
-      // 2. Trazar Esqueleto Articular Biomecánico Adaptado a la Orientación
       ctx.lineWidth = 3.5;
       ctx.strokeStyle = mainColor;
 
       if (isFallen) {
-        // ESQUELETO HORIZONTAL (Persona caída en el suelo)
-        // Orientación: Cabeza a la derecha (p.x + p.w * 0.85), Piernas a la izquierda (p.x + p.w * 0.15)
         const headX = p.x + p.w * 0.85;
         const headY = p.y + p.h * 0.35;
         const shoulderX = p.x + p.w * 0.70;
@@ -848,7 +1107,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
         const hipX = p.x + p.w * 0.45;
         const hipY = p.y + p.h * 0.55;
         const knee1X = p.x + p.w * 0.30;
-        const knee1Y = p.y + p.h * 0.30; // Pierna flexionada hacia arriba
+        const knee1Y = p.y + p.h * 0.30;
         const knee2X = p.x + p.w * 0.28;
         const knee2Y = p.y + p.h * 0.70;
         const ankle1X = p.x + p.w * 0.15;
@@ -856,27 +1115,23 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
         const ankle2X = p.x + p.w * 0.12;
         const ankle2Y = p.y + p.h * 0.80;
 
-        // Brazo en el pecho
         const elbowX = p.x + p.w * 0.65;
         const elbowY = p.y + p.h * 0.25;
         const wristX = p.x + p.w * 0.60;
         const wristY = p.y + p.h * 0.38;
 
-        // Dibujar huesos del esqueleto caído
         ctx.beginPath();
         ctx.moveTo(headX, headY);
         ctx.lineTo(shoulderX, shoulderY);
         ctx.lineTo(hipX, hipY);
         ctx.stroke();
 
-        // Brazo
         ctx.beginPath();
         ctx.moveTo(shoulderX, shoulderY);
         ctx.lineTo(elbowX, elbowY);
         ctx.lineTo(wristX, wristY);
         ctx.stroke();
 
-        // Piernas
         ctx.beginPath();
         ctx.moveTo(hipX, hipY);
         ctx.lineTo(knee1X, knee1Y);
@@ -886,7 +1141,6 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
         ctx.lineTo(ankle2X, ankle2Y);
         ctx.stroke();
 
-        // Nodos articulares
         const fallJoints = [
           [headX, headY], [shoulderX, shoulderY], [elbowX, elbowY], [wristX, wristY],
           [hipX, hipY], [knee1X, knee1Y], [knee2X, knee2Y], [ankle1X, ankle1Y], [ankle2X, ankle2Y]
@@ -903,7 +1157,6 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
         });
 
       } else {
-        // ESQUELETO VERTICAL (Persona de pie estable)
         const cx = p.x + p.w / 2;
         const headY = p.y + p.h * 0.12;
         const shoulderY = p.y + p.h * 0.28;
@@ -955,14 +1208,12 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
         });
       }
 
-      // Tag superior
       ctx.fillStyle = isFallen ? '#ff3355' : '#059669';
       ctx.fillRect(p.x, p.y - 22, p.w, 22);
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 10px JetBrains Mono';
       ctx.fillText(isFallen ? `[!] SUJETO #${p.id} (CAÍDA EN SUELO)` : `SUJETO #${p.id} (POSTURA OK)`, p.x + 6, p.y - 6);
 
-      // Panel inferior de telemetría de ángulo
       ctx.fillStyle = 'rgba(16, 23, 29, 0.94)';
       ctx.fillRect(p.x, p.y + p.h + 6, p.w, 34);
       ctx.strokeStyle = isFallen ? '#ff3355' : '#374e5e';
@@ -976,7 +1227,6 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
       ctx.fillText(isFallen ? `ALERTA: COLAPSO DETECTADO` : `ESTABILIDAD: 98% [NORMAL]`, p.x + 6, p.y + p.h + 32);
     });
 
-    // Panel HUD Superior de Estabilidad
     const isCritical = fallenCount > 0;
     ctx.fillStyle = isCritical ? 'rgba(40, 10, 15, 0.95)' : 'rgba(16, 23, 29, 0.94)';
     ctx.fillRect(20, 50, 360, 72);
