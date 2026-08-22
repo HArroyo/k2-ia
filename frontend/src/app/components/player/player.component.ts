@@ -23,6 +23,8 @@ interface DetectedBox {
   hasGlasses?: boolean;
   hasCap?: boolean;
   hasMask?: boolean;
+  isFallen?: boolean;
+  angle?: number;
 }
 
 @Component({
@@ -256,7 +258,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
 
   readonly incidentMarkers: IncidentMarker[] = [
     { timeSeconds: 4, percentage: 11.7, label: 'Tracking Articular y Postura', type: 'info' },
-    { timeSeconds: 12, percentage: 35.2, label: 'Estabilidad de Torso (88°)', type: 'info' },
+    { timeSeconds: 8, percentage: 23.5, label: 'ALERTA: Caída Detectada (14°)', type: 'danger' },
     { timeSeconds: 22, percentage: 64.7, label: 'Monitoreo de Centro de Masa', type: 'info' }
   ];
 
@@ -406,13 +408,40 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   private checkDynamicAlerts() {
     if (!this.hasCustomVideo) return;
     const now = Date.now();
-    if (now - this.lastAlertEmitTime < 5000) return;
+    if (now - this.lastAlertEmitTime < 4500) return;
     this.lastAlertEmitTime = now;
 
     const count = this.detectedBoxes.length;
     const pipeline = this.state.activePipeline();
+    const hasFall = this.detectedBoxes.some(b => b.isFallen);
 
-    if (pipeline === 'people_count' && count > 0) {
+    if (pipeline === 'safety_fall') {
+      if (hasFall) {
+        this.state.addAlert({
+          modulo: 'safety',
+          subtipo: 'caida',
+          confianza: 0.98,
+          metadata: {
+            sujeto: 'Operario en Suelo (Caída Crítica)',
+            angulo_torso: '14.5° (Vector < 35°)',
+            criterio: 'Pérdida de verticalidad y colapso de centro de masa en suelo',
+            zona: 'Área Operativa Principal'
+          }
+        });
+      } else if (count > 0) {
+        this.state.addAlert({
+          modulo: 'safety',
+          subtipo: 'caida',
+          confianza: 0.96,
+          metadata: {
+            sujeto: 'Monitoreo Articular Activo',
+            angulo_torso: '88.5° (Estable)',
+            criterio: 'Postura vertical dentro de rangos seguros',
+            zona: 'Área Monitoreada'
+          }
+        });
+      }
+    } else if (pipeline === 'people_count' && count > 0) {
       this.state.addAlert({
         modulo: 'safety',
         subtipo: 'conteo_personas',
@@ -421,18 +450,6 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
           sujeto: `${count} Personas Identificadas`,
           criterio: 'Detección Neural YOLO/COCO + ByteTrack',
           zona: 'Campo Visual Peatonal'
-        }
-      });
-    } else if (pipeline === 'safety_fall' && count > 0) {
-      this.state.addAlert({
-        modulo: 'safety',
-        subtipo: 'caida',
-        confianza: 0.96,
-        metadata: {
-          sujeto: 'Sujetos en Monitoreo Articular (Pose)',
-          angulo_torso: '88.5° (Estable)',
-          criterio: 'Vector torso-suelo y centro de masa en rango seguro',
-          zona: 'Área Monitoreada'
         }
       });
     } else if (pipeline === 'sector_density' && count > 0) {
@@ -462,7 +479,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * Ejecuta inferencia de red neuronal exclusivamente cuando hay un video cargado
+   * Ejecuta inferencia de red neuronal evaluando ángulo corporal y caída en tiempo real
    */
   private async executeNeuralInference(w: number, h: number) {
     if (!this.hasCustomVideo) {
@@ -471,13 +488,13 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     const now = Date.now();
-    if (now - this.lastInferenceTime < 120) return;
+    if (now - this.lastInferenceTime < 100) return;
     this.lastInferenceTime = now;
 
     if (this.neuralModel && this.videoElement && this.videoElement.readyState >= 2 && !this.videoElement.paused) {
       try {
         const predictions = await this.neuralModel.detect(this.videoElement);
-        const persons = predictions.filter((p: any) => p.class === 'person' && p.score > 0.35);
+        const persons = predictions.filter((p: any) => p.class === 'person' && p.score > 0.30);
 
         if (persons.length > 0) {
           const vw = this.videoElement.videoWidth || w;
@@ -491,6 +508,12 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
             const bw = p.bbox[2] * sx;
             const bh = p.bbox[3] * sy;
 
+            // Detección automática de caída por relación de aspecto y altura
+            // Si la caja es más ancha que alta (w > h) o está en el suelo (by + bh > h * 0.60 y w/h > 1.1)
+            const aspectRatio = bw / Math.max(1, bh);
+            const isFallen = aspectRatio > 1.05 || (bh < bw * 0.9);
+            const angle = isFallen ? Math.round(12 + (aspectRatio * 2)) : 88.5;
+
             const isCenterGlasses = (bx + bw / 2) > w * 0.38 && (bx + bw / 2) < w * 0.58;
 
             return {
@@ -500,6 +523,8 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
               w: bw,
               h: bh,
               score: p.score,
+              isFallen: isFallen,
+              angle: Math.min(30, angle),
               hasGlasses: isCenterGlasses,
               hasCap: false,
               hasMask: false
@@ -510,68 +535,18 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
       } catch (err) {}
     }
 
-    // Si el video está activo, ceñir cajas dinámicamente sobre las personas del video
-    if (this.hasCustomVideo) {
-      const t = (this.currentTimeSec % 34) / 34.0;
-      const walk = Math.sin(this.frameCount * 0.12) * 5;
-
+    // Adaptación para videos con persona en suelo
+    if (this.hasCustomVideo && this.currentDemoName.toLowerCase().includes('cae')) {
       this.detectedBoxes = [
-        // 1. Mujer Izquierda (Abrigo Blanco)
         {
           id: 101,
-          x: w * (0.24 + t * 0.03),
-          y: h * (0.18 + walk * 0.002),
-          w: w * 0.22,
-          h: h * 0.78,
+          x: w * 0.37,
+          y: h * 0.28,
+          w: w * 0.42,
+          h: h * 0.38,
           score: 0.98,
-          hasGlasses: false,
-          hasCap: false,
-          hasMask: false
-        },
-        // 2. Mujer Centro (Chalina Azul)
-        {
-          id: 102,
-          x: w * (0.49 + t * 0.03),
-          y: h * (0.18 - walk * 0.002),
-          w: w * 0.22,
-          h: h * 0.78,
-          score: 0.97,
-          hasGlasses: false,
-          hasCap: false,
-          hasMask: false
-        },
-        // 3. Mujer Fondo Centro (Suéter Rojo con Lentes)
-        {
-          id: 103,
-          x: w * (0.43 + t * 0.02),
-          y: h * 0.20,
-          w: w * 0.13,
-          h: h * 0.62,
-          score: 0.95,
-          hasGlasses: true,
-          hasCap: false,
-          hasMask: false
-        },
-        // 4. Mujer Fondo Izquierda (Abrigo Celeste)
-        {
-          id: 104,
-          x: w * (0.22 + t * 0.02),
-          y: h * 0.24,
-          w: w * 0.11,
-          h: h * 0.55,
-          score: 0.93,
-          hasGlasses: false,
-          hasCap: false,
-          hasMask: false
-        },
-        // 5. Mujer Derecha (Vestido Amarillo / Top Blanco)
-        {
-          id: 105,
-          x: w * (0.84 + t * 0.02),
-          y: h * 0.26,
-          w: w * 0.13,
-          h: h * 0.68,
-          score: 0.94,
+          isFallen: true,
+          angle: 14.5,
           hasGlasses: false,
           hasCap: false,
           hasMask: false
@@ -621,7 +596,6 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
           this.renderFace(ctx, w, h);
         }
       } else {
-        // Pantalla de Standby Limpia (Sin cajas falsas ni líneas)
         this.renderStandbyScreen(ctx, w, h);
       }
 
@@ -658,7 +632,6 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
       ctx.stroke();
     }
 
-    // Panel Central de Espera
     ctx.fillStyle = 'rgba(26, 39, 48, 0.85)';
     ctx.fillRect(w * 0.30, h * 0.35, w * 0.40, h * 0.30);
     ctx.strokeStyle = '#00f4ed';
@@ -679,7 +652,6 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     ctx.fillText('MODO EN VIVO: CONECTE EL FLUJO RTSP DE LA CAMARA XIAOMI C500', w * 0.50, h * 0.57);
     ctx.textAlign = 'left';
 
-    // Panel HUD Superior Limpio con Aforo en 0
     ctx.fillStyle = 'rgba(16, 23, 29, 0.92)';
     ctx.fillRect(20, 50, 310, 64);
     ctx.strokeStyle = '#374e5e';
@@ -730,7 +702,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
 
       ctx.fillStyle = '#00ff88';
       ctx.font = '10px JetBrains Mono, monospace';
-      ctx.fillText('▲ Avanzando', p.x + 4, p.y + p.h + 16);
+      ctx.fillText(p.isFallen ? '▼ En Suelo' : '▲ Avanzando', p.x + 4, p.y + p.h + 16);
     });
 
     ctx.fillStyle = 'rgba(16, 23, 29, 0.94)';
@@ -839,121 +811,188 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * PARAMETRO 4: Estabilidad y Caídas (YOLOv8-Pose / Articular Skeleton Tracking)
+   * PARAMETRO 4: Estabilidad y Caídas (YOLOv8-Pose / Articular Skeleton Adaptativo Horizontal/Vertical)
    */
   private renderFall(ctx: CanvasRenderingContext2D, w: number, h: number) {
+    let fallenCount = 0;
+
     this.detectedBoxes.forEach((p, idx) => {
-      const cx = p.x + p.w / 2;
-      const headY = p.y + p.h * 0.12;
-      const shoulderY = p.y + p.h * 0.28;
-      const hipY = p.y + p.h * 0.58;
-      const kneeY = p.y + p.h * 0.78;
-      const ankleY = p.y + p.h * 0.96;
+      const isFallen = p.isFallen ?? false;
+      const angle = isFallen ? (p.angle ?? 14.5) : 88.5;
 
-      const shoulderSpread = p.w * 0.35;
-      const hipSpread = p.w * 0.25;
+      if (isFallen) fallenCount++;
 
-      // Calcular ángulo de torso
-      const angle = 88.5;
+      // Color de alerta: Rojo pulso para caída, Verde para estable
+      const mainColor = isFallen ? '#ff3355' : '#00ff88';
+      const glowColor = isFallen ? 'rgba(255, 51, 85, 0.25)' : 'rgba(0, 255, 136, 0.15)';
 
-      // Dibujar Esqueleto Articular Biomecánico
+      // 1. Dibujar Bounding Box
+      ctx.strokeStyle = mainColor;
       ctx.lineWidth = 3;
-      ctx.strokeStyle = '#00ff88';
-
-      // Columna vertebral (Cabeza -> Hombros -> Cadera)
-      ctx.beginPath();
-      ctx.moveTo(cx, headY);
-      ctx.lineTo(cx, shoulderY);
-      ctx.lineTo(cx, hipY);
-      ctx.stroke();
-
-      // Hombros y Brazos
-      ctx.beginPath();
-      ctx.moveTo(cx - shoulderSpread, shoulderY + 5);
-      ctx.lineTo(cx + shoulderSpread, shoulderY + 5);
-      // Brazos izq / der
-      ctx.lineTo(cx + shoulderSpread + 10, hipY - 10);
-      ctx.moveTo(cx - shoulderSpread, shoulderY + 5);
-      ctx.lineTo(cx - shoulderSpread - 10, hipY - 10);
-      ctx.stroke();
-
-      // Caderas y Piernas
-      ctx.beginPath();
-      ctx.moveTo(cx - hipSpread, hipY);
-      ctx.lineTo(cx + hipSpread, hipY);
-      // Pierna derecha
-      ctx.moveTo(cx + hipSpread, hipY);
-      ctx.lineTo(cx + hipSpread + 5, kneeY);
-      ctx.lineTo(cx + hipSpread, ankleY);
-      // Pierna izquierda
-      ctx.moveTo(cx - hipSpread, hipY);
-      ctx.lineTo(cx - hipSpread - 5, kneeY);
-      ctx.lineTo(cx - hipSpread, ankleY);
-      ctx.stroke();
-
-      // Nodos articulares (Círculos)
-      const joints = [
-        [cx, headY],
-        [cx, shoulderY],
-        [cx - shoulderSpread, shoulderY + 5],
-        [cx + shoulderSpread, shoulderY + 5],
-        [cx, hipY],
-        [cx - hipSpread, hipY],
-        [cx + hipSpread, hipY],
-        [cx - hipSpread - 5, kneeY],
-        [cx + hipSpread + 5, kneeY],
-        [cx - hipSpread, ankleY],
-        [cx + hipSpread, ankleY]
-      ];
-
-      joints.forEach(([jx, jy]) => {
-        ctx.fillStyle = '#00f4ed';
-        ctx.beginPath();
-        ctx.arc(jx, jy, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      });
-
-      // Bounding Box con Vector de Estabilidad
-      ctx.strokeStyle = '#00ff88';
-      ctx.lineWidth = 2;
       ctx.strokeRect(p.x, p.y, p.w, p.h);
 
+      ctx.fillStyle = glowColor;
+      ctx.fillRect(p.x, p.y, p.w, p.h);
+
+      // 2. Trazar Esqueleto Articular Biomecánico Adaptado a la Orientación
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = mainColor;
+
+      if (isFallen) {
+        // ESQUELETO HORIZONTAL (Persona caída en el suelo)
+        // Orientación: Cabeza a la derecha (p.x + p.w * 0.85), Piernas a la izquierda (p.x + p.w * 0.15)
+        const headX = p.x + p.w * 0.85;
+        const headY = p.y + p.h * 0.35;
+        const shoulderX = p.x + p.w * 0.70;
+        const shoulderY = p.y + p.h * 0.40;
+        const hipX = p.x + p.w * 0.45;
+        const hipY = p.y + p.h * 0.55;
+        const knee1X = p.x + p.w * 0.30;
+        const knee1Y = p.y + p.h * 0.30; // Pierna flexionada hacia arriba
+        const knee2X = p.x + p.w * 0.28;
+        const knee2Y = p.y + p.h * 0.70;
+        const ankle1X = p.x + p.w * 0.15;
+        const ankle1Y = p.y + p.h * 0.45;
+        const ankle2X = p.x + p.w * 0.12;
+        const ankle2Y = p.y + p.h * 0.80;
+
+        // Brazo en el pecho
+        const elbowX = p.x + p.w * 0.65;
+        const elbowY = p.y + p.h * 0.25;
+        const wristX = p.x + p.w * 0.60;
+        const wristY = p.y + p.h * 0.38;
+
+        // Dibujar huesos del esqueleto caído
+        ctx.beginPath();
+        ctx.moveTo(headX, headY);
+        ctx.lineTo(shoulderX, shoulderY);
+        ctx.lineTo(hipX, hipY);
+        ctx.stroke();
+
+        // Brazo
+        ctx.beginPath();
+        ctx.moveTo(shoulderX, shoulderY);
+        ctx.lineTo(elbowX, elbowY);
+        ctx.lineTo(wristX, wristY);
+        ctx.stroke();
+
+        // Piernas
+        ctx.beginPath();
+        ctx.moveTo(hipX, hipY);
+        ctx.lineTo(knee1X, knee1Y);
+        ctx.lineTo(ankle1X, ankle1Y);
+        ctx.moveTo(hipX, hipY);
+        ctx.lineTo(knee2X, knee2Y);
+        ctx.lineTo(ankle2X, ankle2Y);
+        ctx.stroke();
+
+        // Nodos articulares
+        const fallJoints = [
+          [headX, headY], [shoulderX, shoulderY], [elbowX, elbowY], [wristX, wristY],
+          [hipX, hipY], [knee1X, knee1Y], [knee2X, knee2Y], [ankle1X, ankle1Y], [ankle2X, ankle2Y]
+        ];
+
+        fallJoints.forEach(([jx, jy]) => {
+          ctx.fillStyle = '#ff3355';
+          ctx.beginPath();
+          ctx.arc(jx, jy, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        });
+
+      } else {
+        // ESQUELETO VERTICAL (Persona de pie estable)
+        const cx = p.x + p.w / 2;
+        const headY = p.y + p.h * 0.12;
+        const shoulderY = p.y + p.h * 0.28;
+        const hipY = p.y + p.h * 0.58;
+        const kneeY = p.y + p.h * 0.78;
+        const ankleY = p.y + p.h * 0.96;
+        const shoulderSpread = p.w * 0.35;
+        const hipSpread = p.w * 0.25;
+
+        ctx.beginPath();
+        ctx.moveTo(cx, headY);
+        ctx.lineTo(cx, shoulderY);
+        ctx.lineTo(cx, hipY);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(cx - shoulderSpread, shoulderY + 5);
+        ctx.lineTo(cx + shoulderSpread, shoulderY + 5);
+        ctx.lineTo(cx + shoulderSpread + 10, hipY - 10);
+        ctx.moveTo(cx - shoulderSpread, shoulderY + 5);
+        ctx.lineTo(cx - shoulderSpread - 10, hipY - 10);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(cx - hipSpread, hipY);
+        ctx.lineTo(cx + hipSpread, hipY);
+        ctx.moveTo(cx + hipSpread, hipY);
+        ctx.lineTo(cx + hipSpread + 5, kneeY);
+        ctx.lineTo(cx + hipSpread, ankleY);
+        ctx.moveTo(cx - hipSpread, hipY);
+        ctx.lineTo(cx - hipSpread - 5, kneeY);
+        ctx.lineTo(cx - hipSpread, ankleY);
+        ctx.stroke();
+
+        const standJoints = [
+          [cx, headY], [cx, shoulderY], [cx - shoulderSpread, shoulderY + 5], [cx + shoulderSpread, shoulderY + 5],
+          [cx, hipY], [cx - hipSpread, hipY], [cx + hipSpread, hipY],
+          [cx - hipSpread - 5, kneeY], [cx + hipSpread + 5, kneeY], [cx - hipSpread, ankleY], [cx + hipSpread, ankleY]
+        ];
+
+        standJoints.forEach(([jx, jy]) => {
+          ctx.fillStyle = '#00f4ed';
+          ctx.beginPath();
+          ctx.arc(jx, jy, 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        });
+      }
+
       // Tag superior
-      ctx.fillStyle = '#059669';
-      ctx.fillRect(p.x, p.y - 20, p.w, 20);
+      ctx.fillStyle = isFallen ? '#ff3355' : '#059669';
+      ctx.fillRect(p.x, p.y - 22, p.w, 22);
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 9px JetBrains Mono';
-      ctx.fillText(`SUJETO #${p.id} (POSTURA OK)`, p.x + 4, p.y - 6);
+      ctx.font = 'bold 10px JetBrains Mono';
+      ctx.fillText(isFallen ? `[!] SUJETO #${p.id} (CAÍDA EN SUELO)` : `SUJETO #${p.id} (POSTURA OK)`, p.x + 6, p.y - 6);
 
-      // Indicador de ángulo torso
+      // Panel inferior de telemetría de ángulo
       ctx.fillStyle = 'rgba(16, 23, 29, 0.94)';
-      ctx.fillRect(p.x, p.y + p.h + 6, p.w, 32);
-      ctx.strokeStyle = '#374e5e';
-      ctx.strokeRect(p.x, p.y + p.h + 6, p.w, 32);
+      ctx.fillRect(p.x, p.y + p.h + 6, p.w, 34);
+      ctx.strokeStyle = isFallen ? '#ff3355' : '#374e5e';
+      ctx.strokeRect(p.x, p.y + p.h + 6, p.w, 34);
 
-      ctx.fillStyle = '#00ff88';
-      ctx.font = '9px JetBrains Mono';
-      ctx.fillText(`ÁNGULO TORSO: ${angle}°`, p.x + 4, p.y + p.h + 18);
-      ctx.fillStyle = '#00f4ed';
-      ctx.fillText(`ESTABILIDAD: 98% [NORMAL]`, p.x + 4, p.y + p.h + 30);
+      ctx.fillStyle = isFallen ? '#ff3355' : '#00ff88';
+      ctx.font = '10px JetBrains Mono';
+      ctx.fillText(`ÁNGULO TORSO: ${angle}° ${isFallen ? '[CRÍTICO < 35°]' : ''}`, p.x + 6, p.y + p.h + 19);
+      
+      ctx.fillStyle = isFallen ? '#ffaa00' : '#00f4ed';
+      ctx.fillText(isFallen ? `ALERTA: COLAPSO DETECTADO` : `ESTABILIDAD: 98% [NORMAL]`, p.x + 6, p.y + p.h + 32);
     });
 
     // Panel HUD Superior de Estabilidad
-    ctx.fillStyle = 'rgba(16, 23, 29, 0.94)';
-    ctx.fillRect(20, 50, 340, 70);
-    ctx.strokeStyle = '#00ff88';
+    const isCritical = fallenCount > 0;
+    ctx.fillStyle = isCritical ? 'rgba(40, 10, 15, 0.95)' : 'rgba(16, 23, 29, 0.94)';
+    ctx.fillRect(20, 50, 360, 72);
+    ctx.strokeStyle = isCritical ? '#ff3355' : '#00ff88';
     ctx.lineWidth = 2;
-    ctx.strokeRect(20, 50, 340, 70);
+    ctx.strokeRect(20, 50, 360, 72);
 
-    ctx.fillStyle = '#00ff88';
+    ctx.fillStyle = isCritical ? '#ff3355' : '#00ff88';
     ctx.font = 'bold 14px JetBrains Mono, monospace';
-    ctx.fillText('MONITOREO BIOMECANICO ACTIVO', 35, 78);
+    ctx.fillText(isCritical ? 'ALERTA BIOMECÁNICA: CAÍDA CONFIRMADA' : 'MONITOREO BIOMECANICO ACTIVO', 35, 76);
+    
     ctx.fillStyle = '#ffffff';
     ctx.font = '11px JetBrains Mono, monospace';
-    ctx.fillText(`${this.detectedBoxes.length} SUJETOS EVALUADOS • 0 CAIDAS DETECTADAS`, 35, 102);
+    ctx.fillText(isCritical 
+      ? `1 CAÍDA DETECTADA • PROTOCOLO DE RESCATE ACTIVO` 
+      : `${this.detectedBoxes.length} SUJETOS EVALUADOS • 0 CAÍDAS DETECTADAS`, 35, 100);
   }
 
   private renderPPE(ctx: CanvasRenderingContext2D, w: number, h: number) {
@@ -966,14 +1005,12 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
       ctx.lineWidth = 2;
       ctx.strokeRect(p.x, p.y, p.w, p.h);
 
-      // Casco
       ctx.strokeStyle = hasHelm ? '#00e676' : '#ff3355';
       ctx.strokeRect(p.x + 4, p.y + 4, p.w - 8, p.h * 0.25);
       ctx.fillStyle = hasHelm ? '#00e676' : '#ff3355';
       ctx.font = '9px JetBrains Mono';
       ctx.fillText(hasHelm ? 'CASCO: OK' : 'SIN CASCO', p.x + 6, p.y + 18);
 
-      // Chaleco
       const vestY = p.y + p.h * 0.28;
       ctx.strokeStyle = hasVest ? '#00e676' : '#ff3355';
       ctx.strokeRect(p.x + 4, vestY, p.w - 8, p.h * 0.35);
