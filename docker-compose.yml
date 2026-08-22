@@ -1,0 +1,176 @@
+version: '3.8'
+
+services:
+  # -------------------------------------------------------------
+  # 1. Servidor de Streaming de Video (RTSP / WebRTC / HLS)
+  # -------------------------------------------------------------
+  k2-mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: k2-mediamtx
+    restart: unless-stopped
+    ports:
+      - "8554:8554"   # RTSP
+      - "8889:8889"   # WebRTC
+      - "8888:8888"   # HLS
+      - "9997:9997"   # API
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
+    environment:
+      - MTX_PROTOCOLS=tcp
+    networks:
+      - k2-network
+
+  # -------------------------------------------------------------
+  # 2. Broker de Mensajería y Caché (Redis)
+  # -------------------------------------------------------------
+  k2-redis:
+    image: redis:7-alpine
+    container_name: k2-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - k2-network
+
+  # -------------------------------------------------------------
+  # 3. Base de Datos Relacional (PostgreSQL)
+  # -------------------------------------------------------------
+  k2-database:
+    image: postgres:16-alpine
+    container_name: k2-database
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: k2_seguridad
+      POSTGRES_USER: k2_user
+      POSTGRES_PASSWORD: k2_secure_password
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - k2-network
+
+  # -------------------------------------------------------------
+  # 4. Backend API Laravel 11 (QueryBuilder Estricto)
+  # -------------------------------------------------------------
+  k2-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: k2-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      APP_NAME: "K2 Seguridad IA"
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: "base64:3qOq94/8Dq0lV5LhZ3Oa1K4W6r7S9u0v2X4y6z8A0bC="
+      APP_URL: http://localhost:8000
+      DB_CONNECTION: pgsql
+      DB_HOST: k2-database
+      DB_PORT: 5432
+      DB_DATABASE: k2_seguridad
+      DB_USERNAME: k2_user
+      DB_PASSWORD: k2_secure_password
+      REDIS_HOST: k2-redis
+      REDIS_PORT: 6379
+      AI_ENGINE_URL: http://k2-ai-engine:8001
+    volumes:
+      - ./storage/snapshots:/var/www/storage/app/public/snapshots
+      - ./storage/forensic_videos:/var/www/storage/app/public/forensic_videos
+    depends_on:
+      - k2-database
+      - k2-redis
+    networks:
+      - k2-network
+
+  # -------------------------------------------------------------
+  # 5. Pasarela en Tiempo Real (Node.js + Socket.io)
+  # -------------------------------------------------------------
+  k2-realtime:
+    build:
+      context: ./realtime
+      dockerfile: Dockerfile
+    container_name: k2-realtime
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      REDIS_HOST: k2-redis
+      REDIS_PORT: 6379
+    depends_on:
+      - k2-redis
+    networks:
+      - k2-network
+
+  # -------------------------------------------------------------
+  # 6. Motor de Inferencia IA (Python 3.10+ / FastAPI / GPU)
+  # -------------------------------------------------------------
+  k2-ai-engine:
+    build:
+      context: ./ai-engine
+      dockerfile: Dockerfile
+    container_name: k2-ai-engine
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      PORT: 8001
+      REDIS_HOST: k2-redis
+      REDIS_PORT: 6379
+      BACKEND_API_URL: http://k2-backend:8000/api
+      MEDIAMTX_RTSP_URL: rtsp://k2-mediamtx:8554/xiaomi_c500
+      SNAPSHOT_DIR: /storage/snapshots
+      FORENSIC_DIR: /storage/forensic_videos
+      CUDA_VISIBLE_DEVICES: "0"
+    volumes:
+      - ./storage/snapshots:/storage/snapshots
+      - ./storage/forensic_videos:/storage/forensic_videos
+    depends_on:
+      - k2-mediamtx
+      - k2-redis
+    networks:
+      - k2-network
+    # Soporte GPU para RunPod / NVIDIA Docker
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # -------------------------------------------------------------
+  # 7. Frontend (Angular 17+ / Tailwind K2 Brandbook)
+  # -------------------------------------------------------------
+  k2-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: k2-frontend
+    restart: unless-stopped
+    ports:
+      - "4200:80"
+    environment:
+      API_URL: http://localhost:8000/api
+      AI_STREAM_URL: http://localhost:8001
+      SOCKET_URL: http://localhost:3001
+    depends_on:
+      - k2-backend
+      - k2-ai-engine
+      - k2-realtime
+    networks:
+      - k2-network
+
+networks:
+  k2-network:
+    driver: bridge
+
+volumes:
+  db_data:
+  redis_data:

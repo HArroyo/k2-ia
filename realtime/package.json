@@ -1,0 +1,15 @@
+{
+  "name": "k2-realtime-gateway",
+  "version": "1.0.0",
+  "description": "Pasarela en tiempo real WebSockets Socket.io para K2 Seguridad y Resguardo",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "ioredis": "^5.4.1",
+    "socket.io": "^4.7.5"
+  }
+}

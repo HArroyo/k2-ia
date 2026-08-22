@@ -1,0 +1,39 @@
+# Dependencias de Node.js / Angular
+node_modules/
+dist/
+.angular/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependencias y entorno de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.venv
+env/
+venv/
+ENV/
+*.egg-info/
+.pytest_cache/
+
+# PHP / Composer / Laravel
+vendor/
+.phpunit.result.cache
+*.sqlite-journal
+
+# Almacenamiento temporal de videos/snapshots (opcional)
+storage/snapshots/*.jpg
+storage/forensic_videos/*.mp4
+storage/forensic_videos/*.mkv
+!storage/snapshots/.gitkeep
+!storage/forensic_videos/.gitkeep
+
+# Logs y SO
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

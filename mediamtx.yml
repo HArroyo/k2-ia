@@ -1,0 +1,40 @@
+# Configuración MediaMTX para K2 Seguridad y Resguardo
+logLevel: info
+logDestinations: [stdout]
+
+# Configuración RTSP
+rtsp: yes
+rtspAddress: :8554
+protocols: [tcp]
+
+# Configuración WebRTC (baja latencia)
+webrtc: yes
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+webrtcAllowOrigins: ['*']
+
+# Configuración HLS
+hls: yes
+hlsAddress: :8888
+hlsAlwaysRemux: yes
+
+# Configuración API
+api: yes
+apiAddress: :9997
+
+# Rutas de Streaming
+paths:
+  # Canal para la cámara Xiaomi Smart C500
+  xiaomi_c500:
+    source: publisher
+    sourceOnDemand: no
+
+  # Canal para el stream procesado con inferencia IA
+  k2_ai_stream:
+    source: publisher
+    sourceOnDemand: no
+
+  # Canal para análisis forense
+  k2_forensic_stream:
+    source: publisher
+    sourceOnDemand: no
