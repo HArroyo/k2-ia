@@ -74,7 +74,7 @@ export class ApiService {
   }
 
   uploadForensicVideo(formData: FormData): Observable<any> {
-    return this.http.post(`${this.apiUrl}/forensic/upload`, formData);
+    return this.http.post(`${this.aiUrl}/forensic/upload`, formData);
   }
 
   getZones(): Observable<any> {
