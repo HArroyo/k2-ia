@@ -7,6 +7,10 @@ echo "======================================================================"
 echo "    INICIANDO DEMO IA K2 SEGURIDAD Y RESGUARDO EN RUNPOD (GPU)        "
 echo "======================================================================"
 
+# Determinar directorio raíz del proyecto
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+echo "Directorio del proyecto: $PROJECT_DIR"
+
 # 1. Instalar utilidades esenciales de sistema
 apt-get update -y
 apt-get install -y ffmpeg libsm6 libxext6 libgl1 libglib2.0-0 curl php-cli php-sqlite3 php-curl nodejs npm redis-server psmisc lsof
@@ -28,25 +32,25 @@ service redis-server start || redis-server --daemonize yes
 
 # 4. Iniciar Motor IA Python en background (Puerto 8001)
 echo "[3/4] Iniciando Motor de Inferencia IA (Python + PyTorch GPU)..."
-cd /workspace/k2-demo/ai-engine
+cd "$PROJECT_DIR/ai-engine"
 pip install -r requirements.txt
 nohup python3 main.py > /workspace/ai_engine.log 2>&1 &
 echo "Motor IA ejecutándose en puerto 8001 (Log: /workspace/ai_engine.log)"
 
 # 5. Iniciar Backend API Laravel / QueryBuilder (Puerto 8000)
-cd /workspace/k2-demo/backend
+cd "$PROJECT_DIR/backend"
 nohup php -S 0.0.0.0:8000 -t public > /workspace/backend.log 2>&1 &
 echo "Backend API ejecutándose en puerto 8000 (Log: /workspace/backend.log)"
 
 # 6. Iniciar Pasarela Realtime Socket.io (Puerto 3001)
-cd /workspace/k2-demo/realtime
+cd "$PROJECT_DIR/realtime"
 npm install --cache /tmp/npm-cache --no-bin-links --loglevel=error || true
 nohup node server.js > /workspace/realtime.log 2>&1 &
 echo "Realtime Gateway ejecutándose en puerto 3001 (Log: /workspace/realtime.log)"
 
 # 7. Servir Frontend Dashboard Angular Pre-Compilado (Puerto 4200)
 echo "[4/4] Iniciando Frontend Dashboard K2 (Bundle de Producción)..."
-cd /workspace/k2-demo/frontend/dist/k2-seguridad-frontend
+cd "$PROJECT_DIR/frontend/dist/k2-seguridad-frontend"
 nohup python3 -m http.server 4200 --bind 0.0.0.0 > /workspace/frontend.log 2>&1 &
 echo "Frontend Dashboard ejecutándose en puerto 4200 (Log: /workspace/frontend.log)"
 
