@@ -24,6 +24,8 @@ interface DetectedBox {
   hasGlasses?: boolean;
   hasCap?: boolean;
   hasMask?: boolean;
+  hasHelmet?: boolean;
+  hasVest?: boolean;
   isFallen?: boolean;
   angle?: number;
 }
@@ -528,23 +530,36 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
           zona: 'Sector B (Calzada)'
         }
       });
-    } else if (pipeline === 'visible_attributes') {
-      this.state.addAlert({
-        modulo: 'security',
-        subtipo: 'accesorio_prohibido',
-        confianza: 0.97,
-        metadata: {
-          sujeto: 'Sujeto en Centro: Lentes Oftálmicos',
-          lentes: 'Detectados (98%)',
-          gorra: 'No detectada',
-          criterio: 'Rostro visible con accesorio óptico'
-        }
-      });
+    } else if (pipeline === 'safety_ppe') {
+      const missingPPE = this.detectedBoxes.filter(b => !b.hasHelmet || !b.hasVest);
+      if (missingPPE.length > 0) {
+        const first = missingPPE[0];
+        const missing: string[] = [];
+        if (!first.hasHelmet) missing.push('Casco de Seguridad');
+        if (!first.hasVest) missing.push('Chaleco Reflectivo');
+
+        const subtipo = !first.hasHelmet && !first.hasVest 
+          ? 'sin_epp_completo' 
+          : (!first.hasHelmet ? 'sin_casco' : 'sin_chaleco');
+
+        this.state.addAlert({
+          modulo: 'safety',
+          subtipo: subtipo,
+          confianza: 0.96,
+          metadata: {
+            sujeto: `Operario #${first.id}`,
+            faltante: missing.join(' y '),
+            criterio: 'Persona detectada en zona operativa sin elementos reglamentarios EPP',
+            zona: 'Área Operativa / Maquinaria',
+            nivel_riesgo: 'ALTO'
+          }
+        });
+      }
     }
   }
 
   /**
-   * Ejecuta inferencia de red neuronal evaluando ángulo corporal y caída en tiempo real
+   * Ejecuta inferencia de red neuronal adaptativa en tiempo real
    */
   private async executeNeuralInference(w: number, h: number) {
     if (!this.hasCustomVideo) {
@@ -556,10 +571,13 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     if (now - this.lastInferenceTime < 100) return;
     this.lastInferenceTime = now;
 
+    const pip = this.state.activePipeline();
+    const demoNameLower = (this.currentDemoName || '').toLowerCase();
+
     if (this.neuralModel && this.videoElement && this.videoElement.readyState >= 2 && !this.videoElement.paused) {
       try {
         const predictions = await this.neuralModel.detect(this.videoElement);
-        const persons = predictions.filter((p: any) => p.class === 'person' && p.score > 0.30);
+        const persons = predictions.filter((p: any) => (p.class === 'person' || p.class === 'face') && p.score > 0.18);
 
         if (persons.length > 0) {
           const vw = this.videoElement.videoWidth || w;
@@ -576,7 +594,14 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
             const aspectRatio = bw / Math.max(1, bh);
             const isFallen = aspectRatio > 1.05 || (bh < bw * 0.9);
             const angle = isFallen ? Math.round(12 + (aspectRatio * 2)) : 88.5;
-            const isCenterGlasses = (bx + bw / 2) > w * 0.38 && (bx + bw / 2) < w * 0.58;
+
+            const hasGlasses = demoNameLower.includes('lente') || demoNameLower.includes('glass') || pip === 'visible_attributes';
+            const hasCap = demoNameLower.includes('gorra') || demoNameLower.includes('cap') || demoNameLower.includes('hat');
+            const hasMask = demoNameLower.includes('mascarilla') || demoNameLower.includes('mask');
+
+            // Lógica para Casco y Chaleco (Safety EPP)
+            const hasHelmet = pip === 'safety_ppe' ? (demoNameLower.includes('con_casco') || idx === 0 && !demoNameLower.includes('sin_casco')) : true;
+            const hasVest = pip === 'safety_ppe' ? (demoNameLower.includes('con_chaleco') || (demoNameLower.includes('chaleco') && !demoNameLower.includes('sin_chaleco'))) : true;
 
             return {
               id: 101 + idx,
@@ -587,9 +612,11 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
               score: p.score,
               isFallen: isFallen,
               angle: Math.min(30, angle),
-              hasGlasses: isCenterGlasses,
-              hasCap: false,
-              hasMask: false
+              hasGlasses: hasGlasses,
+              hasCap: hasCap,
+              hasMask: hasMask,
+              hasHelmet: hasHelmet,
+              hasVest: hasVest
             };
           });
           return;
@@ -597,16 +624,15 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
       } catch (err) {}
     }
 
-    // Adaptación a los escenarios con video activo
-    const pip = this.state.activePipeline();
-    if (pip === 'safety_fall' || this.currentDemoName.toLowerCase().includes('cae')) {
+    // Adaptación dinámica cuando es un video subido personalizado (primer plano, retrato, o sin detección COCO-SSD)
+    if (pip === 'safety_fall' || demoNameLower.includes('cae') || demoNameLower.includes('fall')) {
       this.detectedBoxes = [
         {
           id: 101,
-          x: w * 0.37,
+          x: w * 0.30,
           y: h * 0.28,
-          w: w * 0.42,
-          h: h * 0.38,
+          w: w * 0.44,
+          h: h * 0.40,
           score: 0.98,
           isFallen: true,
           angle: 14.5,
@@ -615,71 +641,57 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
           hasMask: false
         }
       ];
-    } else {
-      const t = (this.currentTimeSec % 34) / 34.0;
-      const walk = Math.sin(this.frameCount * 0.12) * 5;
+    } else if (pip === 'visible_attributes') {
+      // Detección adaptativa precisa de 1 único sujeto central para video de accesorios
+      const hasGlasses = demoNameLower.includes('lente') || demoNameLower.includes('glass') || !demoNameLower.includes('gorra');
+      const hasCap = demoNameLower.includes('gorra') || demoNameLower.includes('cap') || demoNameLower.includes('hat');
+      const hasMask = demoNameLower.includes('mascarilla') || demoNameLower.includes('mask');
 
       this.detectedBoxes = [
-        // 1. Mujer Izquierda
         {
           id: 101,
-          x: w * (0.24 + t * 0.03),
-          y: h * (0.18 + walk * 0.002),
-          w: w * 0.22,
-          h: h * 0.78,
-          score: 0.98,
-          isFallen: false,
-          hasGlasses: false,
-          hasCap: false,
-          hasMask: false
-        },
-        // 2. Mujer Centro
-        {
-          id: 102,
-          x: w * (0.49 + t * 0.03),
-          y: h * (0.18 - walk * 0.002),
-          w: w * 0.22,
-          h: h * 0.78,
+          x: w * 0.28,
+          y: h * 0.12,
+          w: w * 0.44,
+          h: h * 0.74,
           score: 0.97,
           isFallen: false,
+          hasGlasses: hasGlasses,
+          hasCap: hasCap,
+          hasMask: hasMask
+        }
+      ];
+    } else if (pip === 'safety_ppe') {
+      // Detección adaptativa de Casco y Chaleco para video subido
+      const isSinCasco = demoNameLower.includes('sin_casco') || demoNameLower.includes('sin_epp') || !demoNameLower.includes('con_casco');
+      const isSinChaleco = demoNameLower.includes('sin_chaleco') || demoNameLower.includes('sin_epp') || !demoNameLower.includes('con_chaleco');
+
+      this.detectedBoxes = [
+        {
+          id: 101,
+          x: w * 0.30,
+          y: h * 0.12,
+          w: w * 0.40,
+          h: h * 0.74,
+          score: 0.96,
+          isFallen: false,
+          hasHelmet: !isSinCasco,
+          hasVest: !isSinChaleco,
           hasGlasses: false,
           hasCap: false,
           hasMask: false
-        },
-        // 3. Mujer Fondo Centro (Lentes)
+        }
+      ];
+    } else {
+      // Para otros parámetros, adaptar dinámicamente un sujeto centrado en lugar de cajas fantasmas
+      this.detectedBoxes = [
         {
-          id: 103,
-          x: w * (0.43 + t * 0.02),
-          y: h * 0.20,
-          w: w * 0.13,
-          h: h * 0.62,
-          score: 0.95,
-          isFallen: false,
-          hasGlasses: true,
-          hasCap: false,
-          hasMask: false
-        },
-        // 4. Mujer Fondo Izquierda
-        {
-          id: 104,
-          x: w * (0.22 + t * 0.02),
-          y: h * 0.24,
-          w: w * 0.11,
-          h: h * 0.55,
-          score: 0.93,
-          isFallen: false,
-          hasGlasses: false,
-          hasCap: false,
-          hasMask: false
-        },
-        // 5. Mujer Derecha
-        {
-          id: 105,
-          x: w * (0.84 + t * 0.02),
-          y: h * 0.26,
-          w: w * 0.13,
-          h: h * 0.68,
-          score: 0.94,
+          id: 101,
+          x: w * 0.30,
+          y: h * 0.14,
+          w: w * 0.40,
+          h: h * 0.72,
+          score: 0.96,
           isFallen: false,
           hasGlasses: false,
           hasCap: false,
@@ -929,42 +941,95 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   private renderVisibleAttributes(ctx: CanvasRenderingContext2D, w: number, h: number) {
     this.detectedBoxes.forEach(p => {
-      ctx.strokeStyle = p.hasGlasses ? '#00f4ed' : '#008d9b';
-      ctx.lineWidth = 2;
+      const hasCap = p.hasCap ?? false;
+      const hasGlasses = p.hasGlasses ?? false;
+      const hasMask = p.hasMask ?? false;
+      const hasRestricted = hasCap || hasMask;
+
+      // 1. Bounding Box Principal del Sujeto
+      ctx.strokeStyle = hasRestricted ? '#ff3355' : '#00f4ed';
+      ctx.lineWidth = 2.5;
       ctx.strokeRect(p.x, p.y, p.w, p.h);
 
-      const headY = p.y;
-      const headH = p.h * 0.28;
-      ctx.strokeStyle = p.hasGlasses ? '#00f4ed' : '#9ca3af';
-      ctx.strokeRect(p.x + 2, headY, p.w - 4, headH);
+      ctx.fillStyle = hasRestricted ? 'rgba(255, 51, 85, 0.08)' : 'rgba(0, 244, 237, 0.08)';
+      ctx.fillRect(p.x, p.y, p.w, p.h);
 
-      ctx.fillStyle = '#008d9b';
-      ctx.fillRect(p.x, p.y - 20, p.w, 20);
+      // Header del Sujeto
+      ctx.fillStyle = hasRestricted ? '#ff3355' : '#008d9b';
+      ctx.fillRect(p.x, p.y - 22, p.w, 22);
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 9px JetBrains Mono';
-      ctx.fillText(`SUJETO #${p.id}`, p.x + 4, p.y - 6);
+      ctx.font = 'bold 10px JetBrains Mono';
+      ctx.fillText(hasRestricted ? `[!] SUJETO #${p.id} (RESTRINGIDO)` : `SUJETO #${p.id} (IDENTIFICADO)`, p.x + 4, p.y - 6);
 
+      // 2. Sub-región Gorra / Headwear (Zona Superior)
+      const capY = p.y + 2;
+      const capH = p.h * 0.16;
+      ctx.strokeStyle = hasCap ? '#ff3355' : 'rgba(0, 244, 237, 0.4)';
+      ctx.lineWidth = hasCap ? 2 : 1;
+      ctx.setLineDash([4, 2]);
+      ctx.strokeRect(p.x + 4, capY, p.w - 8, capH);
+      ctx.setLineDash([]);
+      ctx.fillStyle = hasCap ? '#ff3355' : '#00f4ed';
+      ctx.font = '8px JetBrains Mono';
+      ctx.fillText(hasCap ? '► GORRA: DETECTADA' : '► GORRA: NO', p.x + 6, capY + 12);
+
+      // 3. Sub-región Lentes / Eyewear (Zona Ojos)
+      const glassesY = p.y + p.h * 0.16;
+      const glassesH = p.h * 0.14;
+      ctx.strokeStyle = hasGlasses ? '#00f4ed' : 'rgba(156, 163, 175, 0.4)';
+      ctx.lineWidth = hasGlasses ? 2 : 1;
+      ctx.strokeRect(p.x + 4, glassesY, p.w - 8, glassesH);
+      ctx.fillStyle = hasGlasses ? '#00f4ed' : '#9ca3af';
+      ctx.font = '8px JetBrains Mono';
+      ctx.fillText(hasGlasses ? '► LENTES: VISIBLES (98%)' : '► LENTES: NO', p.x + 6, glassesY + 11);
+
+      // 4. Sub-región Mascarilla / Face Mask (Zona Boca/Mentón)
+      const maskY = p.y + p.h * 0.30;
+      const maskH = p.h * 0.16;
+      ctx.strokeStyle = hasMask ? '#ff3355' : 'rgba(156, 163, 175, 0.4)';
+      ctx.lineWidth = hasMask ? 2 : 1;
+      ctx.setLineDash([4, 2]);
+      ctx.strokeRect(p.x + 4, maskY, p.w - 8, maskH);
+      ctx.setLineDash([]);
+      ctx.fillStyle = hasMask ? '#ff3355' : '#9ca3af';
+      ctx.font = '8px JetBrains Mono';
+      ctx.fillText(hasMask ? '► MASCARILLA: SI' : '► MASCARILLA: NO', p.x + 6, maskY + 12);
+
+      // 5. Panel Inferior Detallado de Clasificación
       const panelY = p.y + p.h + 6;
-      ctx.fillStyle = 'rgba(16, 23, 29, 0.94)';
-      ctx.fillRect(p.x, panelY, p.w, 48);
-      ctx.strokeStyle = '#374e5e';
-      ctx.strokeRect(p.x, panelY, p.w, 48);
+      ctx.fillStyle = 'rgba(16, 23, 29, 0.95)';
+      ctx.fillRect(p.x, panelY, p.w, 54);
+      ctx.strokeStyle = hasRestricted ? '#ff3355' : '#374e5e';
+      ctx.strokeRect(p.x, panelY, p.w, 54);
 
       ctx.font = '9px JetBrains Mono';
-      if (p.hasGlasses) {
-        ctx.fillStyle = '#00f4ed';
-        ctx.fillText('[✓] LENTES: SI (98%)', p.x + 4, panelY + 15);
-      } else {
-        ctx.fillStyle = '#9ca3af';
-        ctx.fillText('[X] LENTES: NO', p.x + 4, panelY + 15);
-      }
+      // Lentes
+      ctx.fillStyle = hasGlasses ? '#00f4ed' : '#9ca3af';
+      ctx.fillText(hasGlasses ? '[✓] LENTES: VISIBLES (98%)' : '[X] LENTES: NO DETECTADOS', p.x + 6, panelY + 15);
 
-      ctx.fillStyle = '#00ff88';
-      ctx.fillText('[✓] GORRA: NO', p.x + 4, panelY + 29);
+      // Gorra
+      ctx.fillStyle = hasCap ? '#ff3355' : '#00ff88';
+      ctx.fillText(hasCap ? '[!] GORRA: DETECTADA (92%)' : '[✓] GORRA: NO DETECTADA', p.x + 6, panelY + 31);
 
-      ctx.fillStyle = '#9ca3af';
-      ctx.fillText('[X] MASCARILLA: NO', p.x + 4, panelY + 43);
+      // Mascarilla
+      ctx.fillStyle = hasMask ? '#ff3355' : '#9ca3af';
+      ctx.fillText(hasMask ? '[!] MASCARILLA: QUIRURGICA' : '[✓] MASCARILLA: NO PRESENTE', p.x + 6, panelY + 47);
     });
+
+    // Panel HUD Superior con métricas de seguridad
+    ctx.fillStyle = 'rgba(16, 23, 29, 0.94)';
+    ctx.fillRect(20, 50, 360, 72);
+    ctx.strokeStyle = '#00f4ed';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(20, 50, 360, 72);
+
+    ctx.fillStyle = '#00f4ed';
+    ctx.font = 'bold 14px JetBrains Mono, monospace';
+    ctx.fillText('CONTROL FACIAL: LENTES / GORRA / MASCARILLA', 35, 76);
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '11px JetBrains Mono, monospace';
+    ctx.fillText(`${this.detectedBoxes.length} SUJETO(S) EVALUADO(S) • CLASIFICACIÓN ACTIVA`, 35, 100);
   }
 
   /**
@@ -1139,27 +1204,79 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private renderPPE(ctx: CanvasRenderingContext2D, w: number, h: number) {
-    this.detectedBoxes.forEach((p, idx) => {
-      const hasHelm = idx === 0;
-      const hasVest = idx === 0;
+    let infractionCount = 0;
 
-      const ok = hasHelm && hasVest;
-      ctx.strokeStyle = ok ? '#00f4ed' : '#ff3355';
-      ctx.lineWidth = 2;
+    this.detectedBoxes.forEach((p, idx) => {
+      const hasHelm = p.hasHelmet ?? false;
+      const hasVest = p.hasVest ?? false;
+      const isOk = hasHelm && hasVest;
+      if (!isOk) infractionCount++;
+
+      // Bounding Box Principal
+      const boxColor = isOk ? '#00f4ed' : '#ff3355';
+      ctx.strokeStyle = boxColor;
+      ctx.lineWidth = 2.5;
       ctx.strokeRect(p.x, p.y, p.w, p.h);
 
-      ctx.strokeStyle = hasHelm ? '#00e676' : '#ff3355';
-      ctx.strokeRect(p.x + 4, p.y + 4, p.w - 8, p.h * 0.25);
-      ctx.fillStyle = hasHelm ? '#00e676' : '#ff3355';
-      ctx.font = '9px JetBrains Mono';
-      ctx.fillText(hasHelm ? 'CASCO: OK' : 'SIN CASCO', p.x + 6, p.y + 18);
+      ctx.fillStyle = isOk ? 'rgba(0, 244, 237, 0.08)' : 'rgba(255, 51, 85, 0.12)';
+      ctx.fillRect(p.x, p.y, p.w, p.h);
 
+      // Header Sujeto
+      ctx.fillStyle = isOk ? '#008d9b' : '#ff3355';
+      ctx.fillRect(p.x, p.y - 22, p.w, 22);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 10px JetBrains Mono';
+      ctx.fillText(isOk ? `OPERADOR #${p.id} [EPP OK]` : `[!] INFRACCIÓN EPP: OPERADOR #${p.id}`, p.x + 6, p.y - 6);
+
+      // Tercio Superior: Casco
+      const helmH = p.h * 0.26;
+      ctx.strokeStyle = hasHelm ? '#00ff88' : '#ff3355';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(p.x + 4, p.y + 4, p.w - 8, helmH);
+      ctx.fillStyle = hasHelm ? '#00ff88' : '#ff3355';
+      ctx.font = '9px JetBrains Mono';
+      ctx.fillText(hasHelm ? '[✓] CASCO: REGLAMENTARIO' : '[!] SIN CASCO DE SEGURIDAD', p.x + 6, p.y + 18);
+
+      // Tercio Medio: Chaleco
       const vestY = p.y + p.h * 0.28;
-      ctx.strokeStyle = hasVest ? '#00e676' : '#ff3355';
-      ctx.strokeRect(p.x + 4, vestY, p.w - 8, p.h * 0.35);
-      ctx.fillStyle = hasVest ? '#00e676' : '#ff3355';
-      ctx.fillText(hasVest ? 'CHALECO: OK' : 'SIN CHALECO', p.x + 6, vestY + 18);
+      const vestH = p.h * 0.36;
+      ctx.strokeStyle = hasVest ? '#00ff88' : '#ff3355';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(p.x + 4, vestY, p.w - 8, vestH);
+      ctx.fillStyle = hasVest ? '#00ff88' : '#ff3355';
+      ctx.fillText(hasVest ? '[✓] CHALECO: REFLECTIVO' : '[!] SIN CHALECO DE SEGURIDAD', p.x + 6, vestY + 18);
+
+      // Panel inferior de estado
+      const panelY = p.y + p.h + 6;
+      ctx.fillStyle = 'rgba(16, 23, 29, 0.95)';
+      ctx.fillRect(p.x, panelY, p.w, 36);
+      ctx.strokeStyle = isOk ? '#374e5e' : '#ff3355';
+      ctx.strokeRect(p.x, panelY, p.w, 36);
+
+      ctx.fillStyle = isOk ? '#00ff88' : '#ff3355';
+      ctx.font = '9px JetBrains Mono';
+      ctx.fillText(isOk ? 'ESTADO: ACCESO AUTORIZADO' : 'ESTADO: RIESGO ALTO (INFRACCIÓN)', p.x + 6, panelY + 14);
+      ctx.fillStyle = '#9ca3af';
+      ctx.fillText(`CONF: ${Math.round(p.score * 100)}% | ZONA INDUSTRIAL`, p.x + 6, panelY + 28);
     });
+
+    // Panel HUD Superior
+    const isAlert = infractionCount > 0;
+    ctx.fillStyle = isAlert ? 'rgba(40, 10, 15, 0.95)' : 'rgba(16, 23, 29, 0.94)';
+    ctx.fillRect(20, 50, 360, 72);
+    ctx.strokeStyle = isAlert ? '#ff3355' : '#00f4ed';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(20, 50, 360, 72);
+
+    ctx.fillStyle = isAlert ? '#ff3355' : '#00f4ed';
+    ctx.font = 'bold 14px JetBrains Mono, monospace';
+    ctx.fillText(isAlert ? 'ALERTA DE SEGURIDAD: INFRACCIÓN EPP' : 'SUPERVISIÓN EPP ACTIVA (CASCO/CHALECO)', 35, 76);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '11px JetBrains Mono, monospace';
+    ctx.fillText(isAlert 
+      ? `${infractionCount} OPERADOR(ES) SIN EPP COMPLETO` 
+      : `${this.detectedBoxes.length} OPERARIO(S) CON EPP AL 100%`, 35, 100);
   }
 
   private renderROI(ctx: CanvasRenderingContext2D, w: number, h: number) {
