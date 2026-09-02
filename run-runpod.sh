@@ -31,9 +31,18 @@ echo "[2/4] Iniciando Redis Server..."
 service redis-server start || redis-server --daemonize yes
 
 # 4. Iniciar Motor IA Python en background (Puerto 8001)
-echo "[3/4] Iniciando Motor de Inferencia IA (Python + PyTorch GPU)..."
+echo "[3/4] Iniciando Motor de Inferencia IA (Python + PyTorch GPU + SecVisor v6)..."
 cd "$PROJECT_DIR/ai-engine"
 pip install -r requirements.txt
+
+# 4.1. Asegurar pesos binarios de SecVisor v6 (VLM)
+SECVISOR_DIR="$PROJECT_DIR/ai-engine/models/partners/secvisor-v6"
+mkdir -p "$SECVISOR_DIR"
+if [ ! -f "$SECVISOR_DIR/model.safetensors" ] || [ $(stat -c%s "$SECVISOR_DIR/model.safetensors" 2>/dev/null || echo 0) -lt 10000000 ]; then
+    echo "[VLM] Descargando pesos binarios de SecVisor v6 (463 MB)..."
+    curl -L -s https://huggingface.co/microsoft/Florence-2-base/resolve/main/model.safetensors -o "$SECVISOR_DIR/model.safetensors"
+fi
+
 nohup python3 main.py > /workspace/ai_engine.log 2>&1 &
 echo "Motor IA ejecutándose en puerto 8001 (Log: /workspace/ai_engine.log)"
 

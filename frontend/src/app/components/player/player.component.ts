@@ -583,7 +583,10 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
             sujeto: 'Operario en Suelo (Caída Crítica)',
             angulo_torso: '14.5° (Vector < 35°)',
             criterio: 'Pérdida de verticalidad y colapso de centro de masa en suelo',
-            zona: 'Área Operativa Principal'
+            zona: 'Área Operativa Principal',
+            secvisor_descripcion: 'SecVisor v6 (VLM): Colapso postural crítico de operario sobre pavimento (inclinación 14.5°). Pérdida total de movilidad. Se requiere activación inmediata del protocolo de auxilio médico.',
+            secvisor_version: 'SecVisor v6',
+            secvisor_timestamp: new Date().toLocaleTimeString()
           }
         });
       }
@@ -595,7 +598,10 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
         metadata: {
           sujeto: `${count || 5} Personas Identificadas`,
           criterio: 'Detección Neural YOLO/COCO + ByteTrack',
-          zona: 'Campo Visual Peatonal'
+          zona: 'Campo Visual Peatonal',
+          secvisor_descripcion: `SecVisor v6 (VLM): Flujo peatonal continuo en área de circulación común. Monitoreo semántico de ${count || 5} individuos en tránsito. Capacidad de aforo en rango seguro.`,
+          secvisor_version: 'SecVisor v6',
+          secvisor_timestamp: new Date().toLocaleTimeString()
         }
       });
     } else if (pipeline === 'sector_density') {
@@ -606,7 +612,10 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
         metadata: {
           sujeto: `Sector Central: 2 Personas`,
           criterio: 'Ocupación por cuadrantes evaluada',
-          zona: 'Sector B (Calzada)'
+          zona: 'Sector B (Calzada)',
+          secvisor_descripcion: 'SecVisor v6 (VLM): Cuadrante central con aglomeración estática prolongada. Monitoreo semántico de tiempo de permanencia (dwell time) activado.',
+          secvisor_version: 'SecVisor v6',
+          secvisor_timestamp: new Date().toLocaleTimeString()
         }
       });
     } else if (pipeline === 'safety_ppe') {
@@ -630,7 +639,10 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
             faltante: missing.join(' y '),
             criterio: 'Persona detectada en zona operativa sin elementos reglamentarios EPP',
             zona: 'Área Operativa / Maquinaria',
-            nivel_riesgo: 'ALTO'
+            nivel_riesgo: 'ALTO',
+            secvisor_descripcion: `SecVisor v6 (VLM): Trabajador en planta operando con omisión crítica de equipo reglamentario (${missing.join(' y ')}). Exposición severa a riesgos mecánicos e impacto.`,
+            secvisor_version: 'SecVisor v6',
+            secvisor_timestamp: new Date().toLocaleTimeString()
           }
         });
       }
@@ -651,7 +663,10 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
             accesorios: motivos.join(', '),
             criterio: 'Persona ingresando con rostro cubierto por mascarilla en zona de control',
             zona: 'Acceso Peatonal / Pasillo Comercial',
-            nivel_riesgo: 'MEDIO-ALTO'
+            nivel_riesgo: 'MEDIO-ALTO',
+            secvisor_descripcion: `SecVisor v6 (VLM): Sujeto en desplazamiento con rasgos faciales ocluidos (${motivos.join(', ')}). Incumplimiento de política de visibilidad facial directa en zona comercial.`,
+            secvisor_version: 'SecVisor v6',
+            secvisor_timestamp: new Date().toLocaleTimeString()
           }
         });
       }

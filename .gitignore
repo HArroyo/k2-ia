@@ -37,13 +37,6 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Pesos del modelo SecVisor v6 (binarios ~450MB, no van al repo)
+# Pesos binarios del modelo SecVisor v6 (binarios ~460MB descargados dinámicamente en el pod)
 ai-engine/models/partners/secvisor-v6/*.safetensors
 ai-engine/models/partners/secvisor-v6/*.bin
-ai-engine/models/partners/secvisor-v6/*.pt
-ai-engine/models/partners/secvisor-v6/config.json
-ai-engine/models/partners/secvisor-v6/tokenizer*
-ai-engine/models/partners/secvisor-v6/preprocessor*
-ai-engine/models/partners/secvisor-v6/generation_config.json
-!ai-engine/models/partners/secvisor-v6/model_card.json
-!ai-engine/models/partners/secvisor-v6/README.md
