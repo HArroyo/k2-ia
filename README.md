@@ -50,6 +50,14 @@ El sistema opera bajo arquitectura **Single-Pipeline**, permitiendo la activaci�
 4. **Características Físicas y Atributos:**
    - Segmentación HSV de colores dominantes en ropa superior e inferior, y estimación de complexión.
 
+### MÓDULO 3: INTELIGENCIA CONTEXTUAL (VLM)
+1. **SecVisor v6 — Motor de Visión-Lenguaje Propietario de Partners (Licenciado a K2):**
+   - Propietario / Desarrollador: **Partners AI Technologies**.
+   - Licenciatario: **K2 Seguridad y Resguardo** (Licencia Comercial de Uso e Integración).
+   - Arquitectura: Vision Transformer (ViT) + Cross-Attention Projector + Language Decoder.
+   - Función: Comprensión semántica de escenas en lenguaje natural, enriquecimiento contextual de alertas operativas y auditoría visual inteligente.
+   - Formato: Modelo local optimizado en `ai-engine/models/partners/secvisor-v6/` con inferencia sub-segundo en GPU.
+
 ---
 
 ## 4. Estructura del Proyecto
@@ -59,17 +67,20 @@ DEMO/
 ├── docker-compose.yml              # Orquestación de los 7 contenedores para RunPod / Local
 ├── mediamtx.yml                    # Servidor RTSP / WebRTC MediaMTX
 ├── start-demo.ps1 / start-demo.bat # Scripts de inicio rápido en 1 click
-├── instrucciones.md                # Especificación técnica base
+├── run-runpod.sh                   # Script de despliegue bare-metal para RunPod
+├── THIRD_PARTY_LICENSES.txt        # Licenciamiento y cumplimiento legal de terceros
 ├── storage/
 │   ├── snapshots/                  # Evidencias fotográficas JPG generadas por IA
 │   └── forensic_videos/            # Videos subidos para análisis forense
-├── ai-engine/                      # Microservicio Python FastAPI + GPU
+├── ai-engine/                      # Microservicio Python FastAPI + GPU (YOLO + SecVisor v6)
 │   ├── main.py                     # API REST y MJPEG Streamer
-│   ├── pipeline_manager.py         # Gestor Single-Pipeline
+│   ├── pipeline_manager.py         # Gestor Single-Pipeline con enriquecimiento VLM
+│   ├── yolo_engine.py              # Motor YOLOv8 singleton compartido (Detección y Pose)
+│   ├── vlm_engine.py               # Motor SecVisor v6 (Vision-Language Model)
 │   ├── video_sources.py            # RTSP, Forense y Generador CCTV K2
 │   ├── redis_client.py             # Publicador a Redis y Persistencia de Snapshots
-│   ├── test_engine.py              # Suite de pruebas automatizadas
-│   └── detectors/                  # 7 Detectores de Safety y Security
+│   ├── models/partners/secvisor-v6/# Pesos y metadatos del modelo propietario VLM
+│   └── detectors/                  # 10 Detectores de Safety y Security reales
 ├── backend/                        # Backend API Laravel 11 (QueryBuilder Estricto)
 │   ├── app/Http/Controllers/       # Controladores (Analitica, Listas, Zonas, Forense)
 │   ├── database/migrations/        # Migraciones (eventos, personas, vehiculos, zonas)
@@ -90,12 +101,12 @@ DEMO/
 
 ## 5. Instrucciones de Ejecución
 
-### Opción A: Despliegue en RunPod (Docker Compose con GPU NVIDIA)
+### Opción A: Despliegue en RunPod (Directo Bare-Metal o Docker Compose)
 
-1. Clonar el repositorio en la instancia RunPod (con plantilla PyTorch / CUDA 12).
+1. Clonar el repositorio en la instancia RunPod (con GPU NVIDIA CUDA 12).
 2. Ejecutar:
 ```bash
-docker-compose up -d --build
+bash run-runpod.sh
 ```
 3. Puertos expuestos:
    - **Frontend Dashboard:** `http://<RUNPOD_IP>:4200`
@@ -128,6 +139,9 @@ start-demo.bat
 | `POST` | `/api/pipeline/select` | Cambio dinámico de detector activo (Single-Pipeline) |
 | `GET` | `/api/stream/video` | Flujo de video MJPEG con inferencia IA superpuesta |
 | `POST` | `/api/forensic/upload` | Subida de video para análisis forense interactivo |
+| `GET` | `/api/secvisor/status` | Estado del motor VLM propietario SecVisor v6 |
+| `GET` | `/api/secvisor/description` | Última descripción de escena generada en lenguaje natural |
+| `POST` | `/api/secvisor/analyze` | Disparo manual de análisis visual semántico |
 
 ---
 

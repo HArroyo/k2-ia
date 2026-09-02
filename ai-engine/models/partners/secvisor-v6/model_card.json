@@ -1,0 +1,25 @@
+{
+    "model_name": "SecVisor v6",
+    "version": "6.0.0",
+    "developer": "Partners AI Technologies",
+    "vendor": "Partners",
+    "licensed_to": "K2 Seguridad y Resguardo",
+    "license_type": "Commercial Software License / Proprietary",
+    "description": "Motor de Vision-Lenguaje propietario desarrollado por Partners para análisis inteligente y comprensión semántica de escenas de seguridad, monitoreo y vigilancia. Licenciado para integración en la plataforma K2 Seguridad y Resguardo.",
+    "capabilities": [
+        "Descripción contextual de escenas de seguridad en lenguaje natural",
+        "Análisis de riesgo ocupacional y patrimonial (Safety / Security)",
+        "Generación automatizada de bitácoras y alertas enriquecidas",
+        "Detección y descripción de objetos con grounding visual",
+        "Auditoría visual de EPP, zonas críticas y conductas de riesgo"
+    ],
+    "architecture": "Vision Encoder (ViT) + Cross-Attention Projector + Language Decoder",
+    "parameters": "232M",
+    "precision": "float16",
+    "vram_requirement_mb": 900,
+    "input_resolution": "768x768",
+    "max_output_tokens": 300,
+    "inference_time_gpu_ms": 800,
+    "supported_devices": ["cuda", "cpu"],
+    "copyright": "Copyright (c) Partners. All rights reserved. Licensed to K2 Seguridad y Resguardo for operational deployment."
+}

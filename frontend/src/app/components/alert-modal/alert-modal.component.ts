@@ -78,6 +78,22 @@ import { ApiService } from '../../services/api.service';
                   <span class="text-red-400 font-bold">{{ alert.metadata?.accion_requerida || alert.metadata?.accion || alert.metadata?.nivel_riesgo || 'Auditoría Estándar' }}</span>
                 </div>
 
+                <!-- Análisis Inteligente SecVisor v6 (VLM) -->
+                @if (alert.metadata?.secvisor_descripcion) {
+                  <div class="p-3 bg-gradient-to-br from-k2-darkblue to-teal-950/40 rounded-xl border border-k2-accent/40 space-y-1">
+                    <div class="flex items-center justify-between">
+                      <span class="text-[10px] font-bold text-k2-accent flex items-center space-x-1 uppercase">
+                        <span class="w-1.5 h-1.5 rounded-full bg-k2-accent animate-pulse"></span>
+                        <span>ANÁLISIS CONTEXTUAL SECVISOR V6</span>
+                      </span>
+                      <span class="text-[9px] font-mono text-gray-400">PARTNERS VLM</span>
+                    </div>
+                    <p class="text-[11px] text-gray-200 font-sans leading-relaxed italic">
+                      "{{ alert.metadata?.secvisor_descripcion }}"
+                    </p>
+                  </div>
+                }
+
                 <!-- JSON Crudo de Metadatos -->
                 <div class="pt-2">
                   <span class="text-gray-400 block mb-1">Metadata Completa (JSON):</span>

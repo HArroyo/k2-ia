@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from config import settings
 from pipeline_manager import pipeline_mgr
 from video_sources import video_manager
+from vlm_engine import secvisor_engine
 
 app = FastAPI(
     title="K2 AI Engine - Video Analytics",
@@ -36,6 +37,10 @@ class ModeSelectRequest(BaseModel):
 
 class ZoneROIRequest(BaseModel):
     points: list
+
+class SecVisorQueryRequest(BaseModel):
+    prompt: str = "general"
+    category: str = "general"  # "safety" | "security" | "general"
 
 @app.get("/api/health")
 def health_check():
@@ -119,6 +124,37 @@ def single_frame():
     frame, _ = pipeline_mgr.process_next_frame()
     ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
     return StreamingResponse(iter([buffer.tobytes()]), media_type="image/jpeg")
+
+# ---- SecVisor v6 API ----
+
+@app.get("/api/secvisor/status")
+def secvisor_status():
+    """Estado del motor SecVisor v6"""
+    return secvisor_engine.get_status()
+
+@app.get("/api/secvisor/description")
+def secvisor_last_description():
+    """Retorna la última descripción de escena generada por SecVisor v6"""
+    return {
+        "description": secvisor_engine.get_last_description(),
+        "model": "SecVisor v6",
+        "timestamp": time.time()
+    }
+
+@app.post("/api/secvisor/analyze")
+def secvisor_analyze_now(req: SecVisorQueryRequest):
+    """Dispara un análisis inmediato de la escena actual con SecVisor v6"""
+    frame = pipeline_mgr.last_frame_processed
+    if frame is None:
+        raise HTTPException(status_code=400, detail="No hay frames procesados aún")
+    
+    description = secvisor_engine.analyze_scene(frame, category=req.category)
+    return {
+        "description": description,
+        "model": "SecVisor v6",
+        "category": req.category,
+        "timestamp": time.time()
+    }
 
 if __name__ == "__main__":
     import uvicorn

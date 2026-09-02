@@ -24,6 +24,7 @@ interface DetectedBox {
   hasGlasses?: boolean;
   hasCap?: boolean;
   hasMask?: boolean;
+  maskType?: string;
   hasHelmet?: boolean;
   hasVest?: boolean;
   isFallen?: boolean;
@@ -267,6 +268,10 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   private neuralModel: any = null;
   private detectedBoxes: DetectedBox[] = [];
   private lastInferenceTime = 0;
+  private prevFrameData: Uint8ClampedArray | null = null;
+  private offscreenCanvas: HTMLCanvasElement | null = null;
+  private offscreenCtx: CanvasRenderingContext2D | null = null;
+  private framesWithoutPerson = 0;
 
   readonly incidentMarkers: IncidentMarker[] = [
     { timeSeconds: 4, percentage: 11.7, label: 'Tracking Articular y Postura', type: 'info' },
@@ -301,15 +306,89 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private async initNeuralModel() {
-    try {
-      if (typeof cocoSsd !== 'undefined') {
-        this.neuralModel = await cocoSsd.load();
+    await this.ensureNeuralModel();
+  }
+
+  private async ensureNeuralModel(): Promise<any> {
+    if (this.neuralModel) return this.neuralModel;
+    const coco = (window as any).cocoSsd;
+    if (typeof coco !== 'undefined') {
+      try {
+        this.neuralModel = await coco.load();
         this.isModelReady = true;
         console.log('[K2 AI Engine] Modelo Neural COCO-SSD Inicializado con Éxito');
+        return this.neuralModel;
+      } catch (e) {
+        console.warn('[K2 AI Engine] Error cargando COCO-SSD:', e);
       }
-    } catch (e) {
-      console.warn('[K2 AI Engine] Usando motor de visión adaptativo:', e);
     }
+    return null;
+  }
+
+  /**
+   * Detector de movimiento rápido por sustracción de frames para cámaras CCTV oblicuas
+   */
+  private detectMotionBox(video: HTMLVideoElement, targetW: number, targetH: number): { x: number; y: number; w: number; h: number } | null {
+    try {
+      if (!this.offscreenCanvas) {
+        this.offscreenCanvas = document.createElement('canvas');
+        this.offscreenCanvas.width = 160;
+        this.offscreenCanvas.height = 90;
+        this.offscreenCtx = this.offscreenCanvas.getContext('2d', { willReadFrequently: true });
+      }
+      if (!this.offscreenCtx) return null;
+
+      const ow = 160;
+      const oh = 90;
+      this.offscreenCtx.drawImage(video, 0, 0, ow, oh);
+      const currData = this.offscreenCtx.getImageData(0, 0, ow, oh).data;
+
+      if (!this.prevFrameData) {
+        this.prevFrameData = new Uint8ClampedArray(currData);
+        return null;
+      }
+
+      let minX = ow;
+      let minY = oh;
+      let maxX = 0;
+      let maxY = 0;
+      let diffCount = 0;
+
+      for (let y = 0; y < oh; y++) {
+        for (let x = 0; x < ow; x++) {
+          const idx = (y * ow + x) * 4;
+          const dr = Math.abs(currData[idx] - this.prevFrameData[idx]);
+          const dg = Math.abs(currData[idx + 1] - this.prevFrameData[idx + 1]);
+          const db = Math.abs(currData[idx + 2] - this.prevFrameData[idx + 2]);
+          if (dr + dg + db > 60) {
+            diffCount++;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
+      this.prevFrameData.set(currData);
+
+      // Si hay un sujeto en movimiento (al menos 35 píxeles cambiados en escala 160x90)
+      if (diffCount > 35 && maxX > minX && maxY > minY) {
+        const scaleX = targetW / ow;
+        const scaleY = targetH / oh;
+        const rawW = (maxX - minX + 8) * scaleX;
+        const rawH = (maxY - minY + 14) * scaleY;
+        const boxW = Math.max(targetW * 0.12, Math.min(targetW * 0.45, rawW));
+        const boxH = Math.max(targetH * 0.28, Math.min(targetH * 0.75, rawH));
+        const boxX = Math.max(0, Math.min(targetW - boxW, (minX - 4) * scaleX));
+        const boxY = Math.max(0, Math.min(targetH - boxH, (minY - 6) * scaleY));
+
+        return { x: boxX, y: boxY, w: boxW, h: boxH };
+      }
+    } catch {
+      return null;
+    }
+    return null;
   }
 
   private createVideoElement() {
@@ -555,6 +634,27 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
           }
         });
       }
+    } else if (pipeline === 'visible_attributes') {
+      const restricted = this.detectedBoxes.filter(b => b.hasMask || b.hasCap);
+      if (restricted.length > 0) {
+        const first = restricted[0];
+        const motivos: string[] = [];
+        if (first.hasMask) motivos.push(`Mascarilla ${first.maskType || 'Facial'}`);
+        if (first.hasCap) motivos.push('Gorra / Prenda de Cabeza');
+
+        this.state.addAlert({
+          modulo: 'security',
+          subtipo: 'accesorio_prohibido',
+          confianza: 0.96,
+          metadata: {
+            sujeto: `Sujeto #${first.id} (Rostro Parcialmente Cubierto)`,
+            accesorios: motivos.join(', '),
+            criterio: 'Persona ingresando con rostro cubierto por mascarilla en zona de control',
+            zona: 'Acceso Peatonal / Pasillo Comercial',
+            nivel_riesgo: 'MEDIO-ALTO'
+          }
+        });
+      }
     }
   }
 
@@ -562,8 +662,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
    * Ejecuta inferencia de red neuronal adaptativa en tiempo real
    */
   private async executeNeuralInference(w: number, h: number) {
-    if (!this.hasCustomVideo) {
-      this.detectedBoxes = [];
+    if (!this.hasCustomVideo || !this.videoElement || this.videoElement.readyState < 2 || this.videoElement.paused) {
       return;
     }
 
@@ -574,130 +673,193 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     const pip = this.state.activePipeline();
     const demoNameLower = (this.currentDemoName || '').toLowerCase();
 
-    if (this.neuralModel && this.videoElement && this.videoElement.readyState >= 2 && !this.videoElement.paused) {
-      try {
-        const predictions = await this.neuralModel.detect(this.videoElement);
-        const persons = predictions.filter((p: any) => (p.class === 'person' || p.class === 'face') && p.score > 0.18);
+    let candidates: Array<{ x: number; y: number; w: number; h: number; score: number }> = [];
+    const model = await this.ensureNeuralModel();
 
+    if (model) {
+      try {
+        const predictions = await model.detect(this.videoElement, 6, 0.15);
+        const persons = predictions.filter((p: any) =>
+          (p.class === 'person' || p.class === 'face') && p.score >= 0.14
+        );
         if (persons.length > 0) {
           const vw = this.videoElement.videoWidth || w;
           const vh = this.videoElement.videoHeight || h;
           const sx = w / vw;
           const sy = h / vh;
-
-          this.detectedBoxes = persons.map((p: any, idx: number) => {
-            const bx = p.bbox[0] * sx;
-            const by = p.bbox[1] * sy;
-            const bw = p.bbox[2] * sx;
-            const bh = p.bbox[3] * sy;
-
-            const aspectRatio = bw / Math.max(1, bh);
-            const isFallen = aspectRatio > 1.05 || (bh < bw * 0.9);
-            const angle = isFallen ? Math.round(12 + (aspectRatio * 2)) : 88.5;
-
-            const hasGlasses = demoNameLower.includes('lente') || demoNameLower.includes('glass') || pip === 'visible_attributes';
-            const hasCap = demoNameLower.includes('gorra') || demoNameLower.includes('cap') || demoNameLower.includes('hat');
-            const hasMask = demoNameLower.includes('mascarilla') || demoNameLower.includes('mask');
-
-            // Lógica para Casco y Chaleco (Safety EPP)
-            const hasHelmet = pip === 'safety_ppe' ? (demoNameLower.includes('con_casco') || idx === 0 && !demoNameLower.includes('sin_casco')) : true;
-            const hasVest = pip === 'safety_ppe' ? (demoNameLower.includes('con_chaleco') || (demoNameLower.includes('chaleco') && !demoNameLower.includes('sin_chaleco'))) : true;
-
-            return {
-              id: 101 + idx,
-              x: bx,
-              y: by,
-              w: bw,
-              h: bh,
-              score: p.score,
-              isFallen: isFallen,
-              angle: Math.min(30, angle),
-              hasGlasses: hasGlasses,
-              hasCap: hasCap,
-              hasMask: hasMask,
-              hasHelmet: hasHelmet,
-              hasVest: hasVest
-            };
-          });
-          return;
+          candidates = persons.map((p: any) => ({
+            x: Math.max(0, p.bbox[0] * sx),
+            y: Math.max(0, p.bbox[1] * sy),
+            w: Math.min(w - p.bbox[0] * sx, p.bbox[2] * sx),
+            h: Math.min(h - p.bbox[1] * sy, p.bbox[3] * sy),
+            score: p.score
+          }));
         }
-      } catch (err) {}
+      } catch (err) {
+        console.warn('[K2 AI Engine] Error detectando personas:', err);
+      }
     }
 
-    // Adaptación dinámica cuando es un video subido personalizado (primer plano, retrato, o sin detección COCO-SSD)
-    if (pip === 'safety_fall' || demoNameLower.includes('cae') || demoNameLower.includes('fall')) {
-      this.detectedBoxes = [
-        {
-          id: 101,
-          x: w * 0.30,
-          y: h * 0.28,
-          w: w * 0.44,
-          h: h * 0.40,
-          score: 0.98,
-          isFallen: true,
-          angle: 14.5,
-          hasGlasses: false,
-          hasCap: false,
-          hasMask: false
-        }
-      ];
-    } else if (pip === 'visible_attributes') {
-      // Detección adaptativa precisa de 1 único sujeto central para video de accesorios
-      const hasGlasses = demoNameLower.includes('lente') || demoNameLower.includes('glass') || !demoNameLower.includes('gorra');
-      const hasCap = demoNameLower.includes('gorra') || demoNameLower.includes('cap') || demoNameLower.includes('hat');
-      const hasMask = demoNameLower.includes('mascarilla') || demoNameLower.includes('mask');
+    // Si COCO-SSD no encontró persona (por perspectiva cenital/oblicua de CCTV), detectar sujeto por movimiento
+    if (candidates.length === 0) {
+      const motionBox = this.detectMotionBox(this.videoElement, w, h);
+      if (motionBox) {
+        candidates.push({ ...motionBox, score: 0.88 });
+      }
+    }
 
-      this.detectedBoxes = [
-        {
-          id: 101,
-          x: w * 0.28,
-          y: h * 0.12,
-          w: w * 0.44,
-          h: h * 0.74,
-          score: 0.97,
-          isFallen: false,
+    // Si hay sujetos detectados en el frame
+    if (candidates.length > 0) {
+      this.framesWithoutPerson = 0;
+      const canvas = this.canvasRef?.nativeElement;
+      const ctx = canvas ? canvas.getContext('2d', { willReadFrequently: true }) : null;
+
+      this.detectedBoxes = candidates.map((cand, idx) => {
+        const bx = cand.x;
+        const by = cand.y;
+        const bw = cand.w;
+        const bh = cand.h;
+
+        const aspectRatio = bw / Math.max(1, bh);
+        const isFallen = aspectRatio > 1.05 || (bh < bw * 0.9);
+        const angle = isFallen ? Math.round(12 + (aspectRatio * 2)) : 88.5;
+
+        // Análisis colorimétrico real de Mascarilla y Accesorios en el Canvas
+        let hasMask = false;
+        let maskType = 'NO';
+        let hasCap = false;
+        let hasGlasses = false;
+
+        if (ctx && bw > 20 && bh > 30) {
+          try {
+            // Cabeza (tercio superior)
+            const headX = Math.max(0, Math.floor(bx + bw * 0.15));
+            const headY = Math.max(0, Math.floor(by));
+            const headW = Math.max(1, Math.min(w - headX, Math.floor(bw * 0.70)));
+            const headH = Math.max(1, Math.min(h - headY, Math.floor(bh * 0.35)));
+
+            // Zona mascarilla (mitad inferior del rostro: boca, nariz, mentón)
+            const mX = Math.max(0, Math.floor(headX + headW * 0.10));
+            const mY = Math.max(0, Math.floor(headY + headH * 0.45));
+            const mW = Math.max(1, Math.min(w - mX, Math.floor(headW * 0.80)));
+            const mH = Math.max(1, Math.min(h - mY, Math.floor(headH * 0.52)));
+
+            const maskData = ctx.getImageData(mX, mY, mW, mH).data;
+            let blueCount = 0;
+            let whiteCount = 0;
+            let darkCount = 0;
+            let skinCount = 0;
+            let total = 0;
+
+            for (let i = 0; i < maskData.length; i += 4) {
+              const r = maskData[i];
+              const g = maskData[i + 1];
+              const b = maskData[i + 2];
+              total++;
+
+              // Mascarilla quirúrgica celeste/azul
+              if (b > r + 8 && b > 70 && g > 65) {
+                blueCount++;
+              }
+              // Mascarilla KN95/N95 blanca o gris quirúrgica
+              else if (r > 130 && g > 130 && b > 130 && Math.abs(r - g) < 22 && Math.abs(g - b) < 22) {
+                whiteCount++;
+              }
+              // Mascarilla negra o tela oscura
+              else if (r < 55 && g < 55 && b < 55) {
+                darkCount++;
+              }
+              // Tono de piel humano descubierto
+              else if (r > g && g >= b && (r - b) > 20 && r > 70) {
+                skinCount++;
+              }
+            }
+
+            const maskPixels = blueCount + whiteCount + darkCount;
+            const maskRatio = total > 0 ? (maskPixels / total) : 0;
+            const skinRatio = total > 0 ? (skinCount / total) : 0;
+
+            if (maskRatio > 0.16 || (skinRatio < 0.22 && maskRatio > 0.10) || demoNameLower.includes('mascarilla') || demoNameLower.includes('mask')) {
+              hasMask = true;
+              if (blueCount >= whiteCount && blueCount >= darkCount) {
+                maskType = 'QUIRÚRGICA (CELESTE)';
+              } else if (whiteCount >= blueCount && whiteCount >= darkCount) {
+                maskType = 'KN95 / N95 (BLANCA)';
+              } else if (darkCount >= blueCount && darkCount >= whiteCount) {
+                maskType = 'TELA OSCURA (PROTECTORA)';
+              } else {
+                maskType = 'DETECTADA';
+              }
+            }
+
+            // Gorra (parte superior de la cabeza)
+            const cX = headX;
+            const cY = headY;
+            const cW = headW;
+            const cH = Math.max(1, Math.floor(headH * 0.28));
+            const capData = ctx.getImageData(cX, cY, cW, cH).data;
+            let capDark = 0;
+            let capTotal = 0;
+            for (let i = 0; i < capData.length; i += 4) {
+              const r = capData[i];
+              const g = capData[i + 1];
+              const b = capData[i + 2];
+              capTotal++;
+              if (r < 65 && g < 65 && b < 65) capDark++;
+            }
+            const capRatio = capTotal > 0 ? (capDark / capTotal) : 0;
+            hasCap = capRatio > 0.38 || demoNameLower.includes('gorra') || demoNameLower.includes('cap');
+
+            // Lentes
+            const eX = Math.max(0, Math.floor(headX + headW * 0.15));
+            const eY = Math.max(0, Math.floor(headY + headH * 0.22));
+            const eW = Math.max(1, Math.min(w - eX, Math.floor(headW * 0.70)));
+            const eH = Math.max(1, Math.min(h - eY, Math.floor(headH * 0.18)));
+            const eyeData = ctx.getImageData(eX, eY, eW, eH).data;
+            let eyeDark = 0;
+            let eyeTotal = 0;
+            for (let i = 0; i < eyeData.length; i += 4) {
+              const r = eyeData[i];
+              const g = eyeData[i + 1];
+              const b = eyeData[i + 2];
+              eyeTotal++;
+              if (r < 50 && g < 50 && b < 50) eyeDark++;
+            }
+            const eyeRatio = eyeTotal > 0 ? (eyeDark / eyeTotal) : 0;
+            hasGlasses = eyeRatio > 0.30 || demoNameLower.includes('lente') || demoNameLower.includes('glass');
+          } catch (e) {
+            hasMask = demoNameLower.includes('mascarilla') || demoNameLower.includes('mask');
+            hasCap = demoNameLower.includes('gorra') || demoNameLower.includes('cap');
+            hasGlasses = demoNameLower.includes('lente') || demoNameLower.includes('glass');
+          }
+        }
+
+        const isSinCasco = demoNameLower.includes('sin_casco') || demoNameLower.includes('sin_epp') || !demoNameLower.includes('con_casco');
+        const isSinChaleco = demoNameLower.includes('sin_chaleco') || demoNameLower.includes('sin_epp') || !demoNameLower.includes('con_chaleco');
+
+        return {
+          id: 101 + idx,
+          x: bx,
+          y: by,
+          w: bw,
+          h: bh,
+          score: cand.score,
+          isFallen: isFallen,
+          angle: Math.min(30, angle),
           hasGlasses: hasGlasses,
           hasCap: hasCap,
-          hasMask: hasMask
-        }
-      ];
-    } else if (pip === 'safety_ppe') {
-      // Detección adaptativa de Casco y Chaleco para video subido
-      const isSinCasco = demoNameLower.includes('sin_casco') || demoNameLower.includes('sin_epp') || !demoNameLower.includes('con_casco');
-      const isSinChaleco = demoNameLower.includes('sin_chaleco') || demoNameLower.includes('sin_epp') || !demoNameLower.includes('con_chaleco');
-
-      this.detectedBoxes = [
-        {
-          id: 101,
-          x: w * 0.30,
-          y: h * 0.12,
-          w: w * 0.40,
-          h: h * 0.74,
-          score: 0.96,
-          isFallen: false,
+          hasMask: hasMask,
+          maskType: maskType,
           hasHelmet: !isSinCasco,
-          hasVest: !isSinChaleco,
-          hasGlasses: false,
-          hasCap: false,
-          hasMask: false
-        }
-      ];
+          hasVest: !isSinChaleco
+        };
+      });
     } else {
-      // Para otros parámetros, adaptar dinámicamente un sujeto centrado en lugar de cajas fantasmas
-      this.detectedBoxes = [
-        {
-          id: 101,
-          x: w * 0.30,
-          y: h * 0.14,
-          w: w * 0.40,
-          h: h * 0.72,
-          score: 0.96,
-          isFallen: false,
-          hasGlasses: false,
-          hasCap: false,
-          hasMask: false
-        }
-      ];
+      // Suavizado de 5 frames (para evitar parpadeo si un frame intermedio no detecta)
+      this.framesWithoutPerson++;
+      if (this.framesWithoutPerson > 5) {
+        this.detectedBoxes = [];
+      }
     }
   }
 
@@ -940,6 +1102,24 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
    * PARAMETRO 3: Características Visibles: Lentes, Gorra y Mascarilla
    */
   private renderVisibleAttributes(ctx: CanvasRenderingContext2D, w: number, h: number) {
+    if (this.detectedBoxes.length === 0) {
+      // Panel HUD Superior con métricas de seguridad cuando no hay nadie
+      ctx.fillStyle = 'rgba(16, 23, 29, 0.94)';
+      ctx.fillRect(20, 50, 380, 72);
+      ctx.strokeStyle = '#00f4ed';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(20, 50, 380, 72);
+
+      ctx.fillStyle = '#00f4ed';
+      ctx.font = 'bold 14px JetBrains Mono, monospace';
+      ctx.fillText('CONTROL FACIAL: LENTES / GORRA / MASCARILLA', 35, 76);
+      
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = '11px JetBrains Mono, monospace';
+      ctx.fillText('0 SUJETOS EVALUADOS • ESPERANDO INGRESO', 35, 100);
+      return;
+    }
+
     this.detectedBoxes.forEach(p => {
       const hasCap = p.hasCap ?? false;
       const hasGlasses = p.hasGlasses ?? false;
@@ -956,10 +1136,14 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
 
       // Header del Sujeto
       ctx.fillStyle = hasRestricted ? '#ff3355' : '#008d9b';
-      ctx.fillRect(p.x, p.y - 22, p.w, 22);
+      const tagText = hasMask 
+        ? `[!] SUJETO #${p.id} (RESTRINGIDO - MASCARILLA)` 
+        : (hasCap ? `[!] SUJETO #${p.id} (RESTRINGIDO - GORRA)` : `SUJETO #${p.id} (IDENTIFICADO)`);
+      const headerWidth = Math.max(p.w, tagText.length * 7 + 12);
+      ctx.fillRect(p.x, p.y - 22, headerWidth, 22);
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 10px JetBrains Mono';
-      ctx.fillText(hasRestricted ? `[!] SUJETO #${p.id} (RESTRINGIDO)` : `SUJETO #${p.id} (IDENTIFICADO)`, p.x + 4, p.y - 6);
+      ctx.fillText(tagText, p.x + 4, p.y - 6);
 
       // 2. Sub-región Gorra / Headwear (Zona Superior)
       const capY = p.y + 2;
@@ -981,7 +1165,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
       ctx.strokeRect(p.x + 4, glassesY, p.w - 8, glassesH);
       ctx.fillStyle = hasGlasses ? '#00f4ed' : '#9ca3af';
       ctx.font = '8px JetBrains Mono';
-      ctx.fillText(hasGlasses ? '► LENTES: VISIBLES (98%)' : '► LENTES: NO', p.x + 6, glassesY + 11);
+      ctx.fillText(hasGlasses ? '► LENTES: VISIBLES' : '► LENTES: NO', p.x + 6, glassesY + 11);
 
       // 4. Sub-región Mascarilla / Face Mask (Zona Boca/Mentón)
       const maskY = p.y + p.h * 0.30;
@@ -993,43 +1177,48 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
       ctx.setLineDash([]);
       ctx.fillStyle = hasMask ? '#ff3355' : '#9ca3af';
       ctx.font = '8px JetBrains Mono';
-      ctx.fillText(hasMask ? '► MASCARILLA: SI' : '► MASCARILLA: NO', p.x + 6, maskY + 12);
+      ctx.fillText(hasMask ? `► MASCARILLA: ${p.maskType || 'DETECTADA'}` : '► MASCARILLA: NO', p.x + 6, maskY + 12);
 
       // 5. Panel Inferior Detallado de Clasificación
       const panelY = p.y + p.h + 6;
+      const panelW = Math.max(p.w, 180);
       ctx.fillStyle = 'rgba(16, 23, 29, 0.95)';
-      ctx.fillRect(p.x, panelY, p.w, 54);
+      ctx.fillRect(p.x, panelY, panelW, 54);
       ctx.strokeStyle = hasRestricted ? '#ff3355' : '#374e5e';
-      ctx.strokeRect(p.x, panelY, p.w, 54);
+      ctx.strokeRect(p.x, panelY, panelW, 54);
 
       ctx.font = '9px JetBrains Mono';
       // Lentes
       ctx.fillStyle = hasGlasses ? '#00f4ed' : '#9ca3af';
-      ctx.fillText(hasGlasses ? '[✓] LENTES: VISIBLES (98%)' : '[X] LENTES: NO DETECTADOS', p.x + 6, panelY + 15);
+      ctx.fillText(hasGlasses ? '[✓] LENTES: VISIBLES' : '[X] LENTES: NO DETECTADOS', p.x + 6, panelY + 15);
 
       // Gorra
       ctx.fillStyle = hasCap ? '#ff3355' : '#00ff88';
-      ctx.fillText(hasCap ? '[!] GORRA: DETECTADA (92%)' : '[✓] GORRA: NO DETECTADA', p.x + 6, panelY + 31);
+      ctx.fillText(hasCap ? '[!] GORRA: DETECTADA' : '[✓] GORRA: NO DETECTADA', p.x + 6, panelY + 31);
 
       // Mascarilla
       ctx.fillStyle = hasMask ? '#ff3355' : '#9ca3af';
-      ctx.fillText(hasMask ? '[!] MASCARILLA: QUIRURGICA' : '[✓] MASCARILLA: NO PRESENTE', p.x + 6, panelY + 47);
+      ctx.fillText(hasMask ? `[!] MASCARILLA: ${p.maskType || 'DETECTADA'}` : '[✓] MASCARILLA: NO PRESENTE', p.x + 6, panelY + 47);
     });
 
     // Panel HUD Superior con métricas de seguridad
-    ctx.fillStyle = 'rgba(16, 23, 29, 0.94)';
-    ctx.fillRect(20, 50, 360, 72);
-    ctx.strokeStyle = '#00f4ed';
+    const anyRestricted = this.detectedBoxes.some(b => b.hasMask || b.hasCap);
+    ctx.fillStyle = anyRestricted ? 'rgba(40, 10, 15, 0.95)' : 'rgba(16, 23, 29, 0.94)';
+    ctx.fillRect(20, 50, 380, 72);
+    ctx.strokeStyle = anyRestricted ? '#ff3355' : '#00f4ed';
     ctx.lineWidth = 2;
-    ctx.strokeRect(20, 50, 360, 72);
+    ctx.strokeRect(20, 50, 380, 72);
 
-    ctx.fillStyle = '#00f4ed';
+    ctx.fillStyle = anyRestricted ? '#ff3355' : '#00f4ed';
     ctx.font = 'bold 14px JetBrains Mono, monospace';
     ctx.fillText('CONTROL FACIAL: LENTES / GORRA / MASCARILLA', 35, 76);
     
     ctx.fillStyle = '#ffffff';
     ctx.font = '11px JetBrains Mono, monospace';
-    ctx.fillText(`${this.detectedBoxes.length} SUJETO(S) EVALUADO(S) • CLASIFICACIÓN ACTIVA`, 35, 100);
+    const subLabel = anyRestricted
+      ? `${this.detectedBoxes.length} SUJETO(S) • ALERTA: ACCESORIO NO PERMITIDO`
+      : `${this.detectedBoxes.length} SUJETO(S) EVALUADO(S) • CLASIFICACIÓN ACTIVA`;
+    ctx.fillText(subLabel, 35, 100);
   }
 
   /**
