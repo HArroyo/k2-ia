@@ -87,7 +87,23 @@ export class VideoStorageService {
             objectUrl: objectUrl
           });
         } else {
-          resolve(null);
+          // Si no hay video asignado directamente a este parámetro, reusar el último video subido
+          const allReq = store.getAll();
+          allReq.onsuccess = () => {
+            const all: StoredVideo[] = allReq.result || [];
+            if (all.length > 0) {
+              all.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+              const latest = all[0];
+              resolve({
+                fileName: latest.fileName,
+                fileBlob: latest.fileBlob,
+                objectUrl: URL.createObjectURL(latest.fileBlob)
+              });
+            } else {
+              resolve(null);
+            }
+          };
+          allReq.onerror = () => resolve(null);
         }
       };
 

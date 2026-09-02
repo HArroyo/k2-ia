@@ -7,7 +7,11 @@ import { SocketService } from './socket.service';
 })
 export class PipelineStateService {
   // Signals de estado reactivo
-  readonly activePipeline = signal<string>('safety_ppe');
+  readonly activePipeline = signal<string>(
+    typeof localStorage !== 'undefined' && localStorage.getItem('k2_active_pipeline') 
+      ? localStorage.getItem('k2_active_pipeline')! 
+      : 'visible_attributes'
+  );
   readonly activeMode = signal<'live' | 'forensic'>('live');
   readonly forensicSpeed = signal<number>(1.0);
   readonly alerts = signal<AlertEvent[]>([]);
@@ -59,6 +63,11 @@ export class PipelineStateService {
 
   setPipeline(pipeline: string) {
     this.activePipeline.set(pipeline);
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('k2_active_pipeline', pipeline);
+      }
+    } catch (e) {}
     this.apiService.selectPipeline(pipeline).subscribe({
       next: (res) => console.log('[Pipeline] Cambiado exitosamente a:', pipeline),
       error: (err) => console.warn('[Pipeline] Error al cambiar en backend:', err)
