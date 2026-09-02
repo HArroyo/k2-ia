@@ -35,12 +35,13 @@ echo "[3/4] Iniciando Motor de Inferencia IA (Python + PyTorch GPU + SecVisor v6
 cd "$PROJECT_DIR/ai-engine"
 pip install -r requirements.txt
 
-# 4.1. Asegurar pesos binarios de SecVisor v6 (VLM)
+# 4.1. Reconstruir pesos binarios de SecVisor v6 (VLM) desde partes del repositorio
 SECVISOR_DIR="$PROJECT_DIR/ai-engine/models/partners/secvisor-v6"
 mkdir -p "$SECVISOR_DIR"
-if [ ! -f "$SECVISOR_DIR/model.safetensors" ] || [ $(stat -c%s "$SECVISOR_DIR/model.safetensors" 2>/dev/null || echo 0) -lt 10000000 ]; then
-    echo "[VLM] Descargando pesos binarios de SecVisor v6 (463 MB)..."
-    curl -L -s https://huggingface.co/microsoft/Florence-2-base/resolve/main/model.safetensors -o "$SECVISOR_DIR/model.safetensors"
+if [ ! -f "$SECVISOR_DIR/model.safetensors" ] || [ $(stat -c%s "$SECVISOR_DIR/model.safetensors" 2>/dev/null || echo 0) -lt 400000000 ]; then
+    echo "[VLM] Reconstruyendo pesos SecVisor v6 desde partes locales del repositorio..."
+    cat "$SECVISOR_DIR"/model.safetensors.part_* > "$SECVISOR_DIR/model.safetensors"
+    echo "[VLM] Modelo SecVisor v6 ensamblado exitosamente ($(stat -c%s "$SECVISOR_DIR/model.safetensors") bytes)."
 fi
 
 nohup python3 main.py > /workspace/ai_engine.log 2>&1 &

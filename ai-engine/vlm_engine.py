@@ -98,18 +98,16 @@ class SecVisorEngine:
             logger.info(f"SecVisor v6: Inicializando en dispositivo {self._device}...")
 
             safetensors_path = os.path.join(MODEL_DIR, "model.safetensors")
-            if not os.path.exists(safetensors_path) or os.path.getsize(safetensors_path) < 10000000:
-                logger.info(f"SecVisor v6: Pesos binarios no encontrados en {safetensors_path}. Descargando (~463MB)...")
-                try:
-                    import urllib.request
-                    urllib.request.urlretrieve(
-                        "https://huggingface.co/microsoft/Florence-2-base/resolve/main/model.safetensors",
-                        safetensors_path
-                    )
-                    logger.info("SecVisor v6: Pesos binarios descargados exitosamente.")
-                except Exception as dl_err:
-                    logger.warning(f"SecVisor v6: Descarga con urllib falló ({dl_err}). Intentando curl...")
-                    os.system(f"curl -L -s https://huggingface.co/microsoft/Florence-2-base/resolve/main/model.safetensors -o {safetensors_path}")
+            if not os.path.exists(safetensors_path) or os.path.getsize(safetensors_path) < 400000000:
+                import glob
+                parts = sorted(glob.glob(os.path.join(MODEL_DIR, "model.safetensors.part_*")))
+                if parts:
+                    logger.info(f"SecVisor v6: Reconstruyendo pesos desde {len(parts)} partes del repositorio...")
+                    with open(safetensors_path, "wb") as outfile:
+                        for part in parts:
+                            with open(part, "rb") as infile:
+                                outfile.write(infile.read())
+                    logger.info(f"SecVisor v6: Pesos ensamblados exitosamente ({os.path.getsize(safetensors_path)} bytes).")
 
             logger.info(f"SecVisor v6: Cargando arquitectura y pesos locales desde {MODEL_DIR}")
 
