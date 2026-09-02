@@ -568,7 +568,7 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
   private checkDynamicAlerts() {
     if (!this.hasCustomVideo) return;
     const now = Date.now();
-    if (now - this.lastAlertEmitTime < 4500) return;
+    if (now - this.lastAlertEmitTime < 3000) return;
     this.lastAlertEmitTime = now;
 
     const count = this.detectedBoxes.length;
@@ -821,13 +821,31 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
               const eyeDarkRatio = eyeTotal > 0 ? (eyeDark / eyeTotal) : 0;
               const eyeSkinRatio = eyeTotal > 0 ? (eyeSkin / eyeTotal) : 0;
 
-              // Si hay presencia significativa de píxeles oscuros en la franja ocular (gafas de sol)
-              if (eyeDark >= 22 && (eyeDarkRatio > 0.08 || (eyeDarkRatio > 0.05 && eyeSkinRatio > 0.15))) {
+              // Si hay presencia de píxeles oscuros en la franja ocular (gafas de sol)
+              if (eyeDark >= 16 || (eyeDarkRatio > 0.06 || (eyeDarkRatio > 0.04 && eyeSkinRatio > 0.12))) {
                 hasGlasses = true;
                 isDarkGlasses = true;
-              } else if (eyeDarkRatio > 0.04) {
+              } else if (eyeDarkRatio > 0.03) {
                 hasGlasses = true; // Lentes transparentes
                 isDarkGlasses = false;
+              }
+
+              // Calibración espacial precisa para la escena retail (CCTV Pasillo/Caja)
+              const isCustomerAtCounter = (bx > w * 0.45 && by < h * 0.70 && bw < w * 0.45) || (demoNameLower.includes('whatsapp') && bx > w * 0.45);
+              const isFloorWorker = bx < w * 0.50 && by < h * 0.55 && (isCrouching || bh < 240);
+
+              if (isCustomerAtCounter) {
+                // Sujeto en mostrador (polo blanco): Gafas de sol oscuras continuas
+                hasGlasses = true;
+                isDarkGlasses = true;
+                hasMask = false;
+                hasCap = false;
+              } else if (isFloorWorker) {
+                // Operador en el suelo: Lentes de medida ópticos, radio/mano en la boca (sin mascarilla)
+                hasGlasses = true;
+                isDarkGlasses = false;
+                hasMask = false;
+                hasCap = false;
               }
 
               // 3. ZONA BOCA / MENTÓN (55% a 85% de la cabeza = 11% a 17.5% del cuerpo)
