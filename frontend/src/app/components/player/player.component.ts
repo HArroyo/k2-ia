@@ -22,12 +22,14 @@ interface DetectedBox {
   h: number;
   score: number;
   hasGlasses?: boolean;
+  isDarkGlasses?: boolean;
   hasCap?: boolean;
   hasMask?: boolean;
   maskType?: string;
   hasHelmet?: boolean;
   hasVest?: boolean;
   isFallen?: boolean;
+  isCrouching?: boolean;
   angle?: number;
 }
 
@@ -647,10 +649,11 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
         });
       }
     } else if (pipeline === 'visible_attributes') {
-      const restricted = this.detectedBoxes.filter(b => b.hasMask || b.hasCap);
+      const restricted = this.detectedBoxes.filter(b => b.hasMask || b.hasCap || (b.hasGlasses && b.isDarkGlasses));
       if (restricted.length > 0) {
         const first = restricted[0];
         const motivos: string[] = [];
+        if (first.hasGlasses && first.isDarkGlasses) motivos.push('Lentes Oscuros / De Sol');
         if (first.hasMask) motivos.push(`Mascarilla ${first.maskType || 'Facial'}`);
         if (first.hasCap) motivos.push('Gorra / Prenda de Cabeza');
 
@@ -659,9 +662,9 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
           subtipo: 'accesorio_prohibido',
           confianza: 0.96,
           metadata: {
-            sujeto: `Sujeto #${first.id} (Rostro Parcialmente Cubierto)`,
+            sujeto: `Sujeto #${first.id} (${motivos[0]})`,
             accesorios: motivos.join(', '),
-            criterio: 'Persona ingresando con rostro cubierto por mascarilla en zona de control',
+            criterio: 'Persona en zona de control con elementos que impiden la identificación facial directa',
             zona: 'Acceso Peatonal / Pasillo Comercial',
             nivel_riesgo: 'MEDIO-ALTO',
             secvisor_descripcion: `SecVisor v6 (VLM): Sujeto en desplazamiento con rasgos faciales ocluidos (${motivos.join(', ')}). Incumplimiento de política de visibilidad facial directa en zona comercial.`,
@@ -739,25 +742,84 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
         const isFallen = aspectRatio > 1.05 || (bh < bw * 0.9);
         const angle = isFallen ? Math.round(12 + (aspectRatio * 2)) : 88.5;
 
-        // Análisis colorimétrico real de Mascarilla y Accesorios en el Canvas
+        // Detección de postura: Sujeto agachado / sentado en el piso (ej. manipulando cajas o mercadería)
+        const isCrouching = !isFallen && (aspectRatio > 0.70 || bh < 140);
+
+        // Análisis colorimétrico real de Mascarilla, Lentes y Gorra en el Canvas
         let hasMask = false;
         let maskType = 'NO';
         let hasCap = false;
         let hasGlasses = false;
+        let isDarkGlasses = false;
 
-        if (ctx && bw > 20 && bh > 30) {
+        // Solo analizamos rostro si el sujeto está de pie y suficientemente definido
+        if (ctx && bw > 25 && bh > 60 && !isCrouching && !isFallen) {
           try {
-            // Cabeza (tercio superior)
-            const headX = Math.max(0, Math.floor(bx + bw * 0.15));
+            // Cabeza centrada anatómicamente: ancho = 40% de los hombros, altura = 16% del cuerpo
+            const headW = Math.max(14, Math.floor(bw * 0.40));
+            const headX = Math.max(0, Math.floor(bx + (bw - headW) / 2));
+            const headH = Math.max(18, Math.floor(bh * 0.16));
             const headY = Math.max(0, Math.floor(by));
-            const headW = Math.max(1, Math.min(w - headX, Math.floor(bw * 0.70)));
-            const headH = Math.max(1, Math.min(h - headY, Math.floor(bh * 0.35)));
 
-            // Zona mascarilla (mitad inferior del rostro: boca, nariz, mentón)
-            const mX = Math.max(0, Math.floor(headX + headW * 0.10));
-            const mY = Math.max(0, Math.floor(headY + headH * 0.45));
-            const mW = Math.max(1, Math.min(w - mX, Math.floor(headW * 0.80)));
-            const mH = Math.max(1, Math.min(h - mY, Math.floor(headH * 0.52)));
+            // 1. ZONA GORRA / CABEZA (0% a 30% de la cabeza = 0% a 5% del cuerpo)
+            const cX = headX;
+            const cY = headY;
+            const cW = headW;
+            const cH = Math.max(5, Math.floor(headH * 0.30));
+            const capData = ctx.getImageData(cX, cY, cW, cH).data;
+            let capDark = 0;
+            let capTotal = 0;
+            for (let i = 0; i < capData.length; i += 4) {
+              const r = capData[i];
+              const g = capData[i + 1];
+              const b = capData[i + 2];
+              capTotal++;
+              if (r < 55 && g < 55 && b < 55) capDark++;
+            }
+            const capRatio = capTotal > 0 ? (capDark / capTotal) : 0;
+            hasCap = capRatio > 0.42;
+
+            // 2. ZONA OJOS / LENTES (30% a 58% de la cabeza = 5% a 9.5% del cuerpo)
+            const eX = Math.max(0, Math.floor(headX + headW * 0.08));
+            const eY = Math.max(0, Math.floor(headY + headH * 0.30));
+            const eW = Math.max(10, Math.floor(headW * 0.84));
+            const eH = Math.max(6, Math.floor(headH * 0.28));
+            const eyeData = ctx.getImageData(eX, eY, eW, eH).data;
+            let eyeDark = 0;
+            let eyeTotal = 0;
+            let eyeSkin = 0;
+            for (let i = 0; i < eyeData.length; i += 4) {
+              const r = eyeData[i];
+              const g = eyeData[i + 1];
+              const b = eyeData[i + 2];
+              eyeTotal++;
+              // Píxeles de lentes oscuros / montura negra
+              if (r < 65 && g < 65 && b < 65) {
+                eyeDark++;
+              }
+              // Piel en franja ocular
+              else if (r > g && g >= b && (r - b) > 16 && r > 70) {
+                eyeSkin++;
+              }
+            }
+            const eyeDarkRatio = eyeTotal > 0 ? (eyeDark / eyeTotal) : 0;
+            const eyeSkinRatio = eyeTotal > 0 ? (eyeSkin / eyeTotal) : 0;
+
+            // Si hay concentración oscura en franja de ojos y poca piel descubierta -> Lentes de sol/oscuros
+            if (eyeDarkRatio > 0.22 || (eyeDarkRatio > 0.15 && eyeSkinRatio < 0.35)) {
+              hasGlasses = true;
+              isDarkGlasses = true;
+            } else if (eyeDarkRatio > 0.08) {
+              hasGlasses = true; // Lentes transparentes / montura ligera
+              isDarkGlasses = false;
+            }
+
+            // 3. ZONA BOCA / MENTÓN (58% a 95% de la cabeza = 9.5% a 15.5% del cuerpo)
+            // IMPORTANTE: Se detiene exactamente en el mentón antes del cuello y camiseta blanca
+            const mX = Math.max(0, Math.floor(headX + headW * 0.12));
+            const mY = Math.max(0, Math.floor(headY + headH * 0.58));
+            const mW = Math.max(10, Math.floor(headW * 0.76));
+            const mH = Math.max(7, Math.floor(headH * 0.36));
 
             const maskData = ctx.getImageData(mX, mY, mW, mH).data;
             let blueCount = 0;
@@ -776,81 +838,45 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
               if (b > r + 8 && b > 70 && g > 65) {
                 blueCount++;
               }
-              // Mascarilla KN95/N95 blanca o gris quirúrgica
-              else if (r > 130 && g > 130 && b > 130 && Math.abs(r - g) < 22 && Math.abs(g - b) < 22) {
+              // Mascarilla KN95/N95 blanca médica pura (tonos neutros claros en mentón)
+              else if (r > 145 && g > 145 && b > 145 && Math.abs(r - g) < 16 && Math.abs(g - b) < 16) {
                 whiteCount++;
               }
               // Mascarilla negra o tela oscura
-              else if (r < 55 && g < 55 && b < 55) {
+              else if (r < 45 && g < 45 && b < 45) {
                 darkCount++;
               }
-              // Tono de piel humano descubierto
-              else if (r > g && g >= b && (r - b) > 20 && r > 70) {
+              // Piel humana descubierta (labios, mentón, mejillas)
+              else if (r > g && g >= b && (r - b) > 16 && r > 70 && r < 230) {
                 skinCount++;
               }
             }
 
-            const maskPixels = blueCount + whiteCount + darkCount;
-            const maskRatio = total > 0 ? (maskPixels / total) : 0;
             const skinRatio = total > 0 ? (skinCount / total) : 0;
+            const blueRatio = total > 0 ? (blueCount / total) : 0;
+            const whiteRatio = total > 0 ? (whiteCount / total) : 0;
+            const darkRatio = total > 0 ? (darkCount / total) : 0;
 
-            if (maskRatio > 0.16 || (skinRatio < 0.22 && maskRatio > 0.10) || demoNameLower.includes('mascarilla') || demoNameLower.includes('mask')) {
+            // Para que exista mascarilla REAL:
+            // La piel en la boca/mentón debe estar oculta (skinRatio < 0.22)
+            // Y debe predominar un material protector (celeste quirúrgico, KN95 blanca o tela oscura)
+            if (skinRatio < 0.22 && (blueRatio > 0.20 || whiteRatio > 0.40 || darkRatio > 0.35)) {
               hasMask = true;
-              if (blueCount >= whiteCount && blueCount >= darkCount) {
+              if (blueRatio >= whiteRatio && blueRatio >= darkRatio) {
                 maskType = 'QUIRÚRGICA (CELESTE)';
-              } else if (whiteCount >= blueCount && whiteCount >= darkCount) {
+              } else if (whiteRatio >= blueRatio && whiteRatio >= darkRatio) {
                 maskType = 'KN95 / N95 (BLANCA)';
-              } else if (darkCount >= blueCount && darkCount >= whiteCount) {
-                maskType = 'TELA OSCURA (PROTECTORA)';
               } else {
-                maskType = 'DETECTADA';
+                maskType = 'TELA OSCURA (PROTECTORA)';
               }
             }
-
-            // Gorra (parte superior de la cabeza)
-            const cX = headX;
-            const cY = headY;
-            const cW = headW;
-            const cH = Math.max(1, Math.floor(headH * 0.28));
-            const capData = ctx.getImageData(cX, cY, cW, cH).data;
-            let capDark = 0;
-            let capTotal = 0;
-            for (let i = 0; i < capData.length; i += 4) {
-              const r = capData[i];
-              const g = capData[i + 1];
-              const b = capData[i + 2];
-              capTotal++;
-              if (r < 65 && g < 65 && b < 65) capDark++;
-            }
-            const capRatio = capTotal > 0 ? (capDark / capTotal) : 0;
-            hasCap = capRatio > 0.38 || demoNameLower.includes('gorra') || demoNameLower.includes('cap');
-
-            // Lentes
-            const eX = Math.max(0, Math.floor(headX + headW * 0.15));
-            const eY = Math.max(0, Math.floor(headY + headH * 0.22));
-            const eW = Math.max(1, Math.min(w - eX, Math.floor(headW * 0.70)));
-            const eH = Math.max(1, Math.min(h - eY, Math.floor(headH * 0.18)));
-            const eyeData = ctx.getImageData(eX, eY, eW, eH).data;
-            let eyeDark = 0;
-            let eyeTotal = 0;
-            for (let i = 0; i < eyeData.length; i += 4) {
-              const r = eyeData[i];
-              const g = eyeData[i + 1];
-              const b = eyeData[i + 2];
-              eyeTotal++;
-              if (r < 50 && g < 50 && b < 50) eyeDark++;
-            }
-            const eyeRatio = eyeTotal > 0 ? (eyeDark / eyeTotal) : 0;
-            hasGlasses = eyeRatio > 0.30 || demoNameLower.includes('lente') || demoNameLower.includes('glass');
           } catch (e) {
-            hasMask = demoNameLower.includes('mascarilla') || demoNameLower.includes('mask');
-            hasCap = demoNameLower.includes('gorra') || demoNameLower.includes('cap');
-            hasGlasses = demoNameLower.includes('lente') || demoNameLower.includes('glass');
+            // Manejo seguro en caso de corte de canvas
           }
         }
 
-        const isSinCasco = demoNameLower.includes('sin_casco') || demoNameLower.includes('sin_epp') || !demoNameLower.includes('con_casco');
-        const isSinChaleco = demoNameLower.includes('sin_chaleco') || demoNameLower.includes('sin_epp') || !demoNameLower.includes('con_chaleco');
+        const isSinCasco = demoNameLower.includes('sin_casco') || demoNameLower.includes('sin_epp');
+        const isSinChaleco = demoNameLower.includes('sin_chaleco') || demoNameLower.includes('sin_epp');
 
         return {
           id: 101 + idx,
@@ -860,8 +886,10 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
           h: bh,
           score: cand.score,
           isFallen: isFallen,
+          isCrouching: isCrouching,
           angle: Math.min(30, angle),
           hasGlasses: hasGlasses,
+          isDarkGlasses: isDarkGlasses,
           hasCap: hasCap,
           hasMask: hasMask,
           maskType: maskType,
@@ -1138,8 +1166,10 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
     this.detectedBoxes.forEach(p => {
       const hasCap = p.hasCap ?? false;
       const hasGlasses = p.hasGlasses ?? false;
+      const isDarkGlasses = p.isDarkGlasses ?? false;
       const hasMask = p.hasMask ?? false;
-      const hasRestricted = hasCap || hasMask;
+      const isCrouching = p.isCrouching ?? false;
+      const hasRestricted = hasCap || hasMask || (hasGlasses && isDarkGlasses);
 
       // 1. Bounding Box Principal del Sujeto
       ctx.strokeStyle = hasRestricted ? '#ff3355' : '#00f4ed';
@@ -1151,52 +1181,67 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
 
       // Header del Sujeto
       ctx.fillStyle = hasRestricted ? '#ff3355' : '#008d9b';
-      const tagText = hasMask 
-        ? `[!] SUJETO #${p.id} (RESTRINGIDO - MASCARILLA)` 
-        : (hasCap ? `[!] SUJETO #${p.id} (RESTRINGIDO - GORRA)` : `SUJETO #${p.id} (IDENTIFICADO)`);
-      const headerWidth = Math.max(p.w, tagText.length * 7 + 12);
+      let tagText = `SUJETO #${p.id} (IDENTIFICADO)`;
+      if (hasGlasses && isDarkGlasses) {
+        tagText = `[!] SUJETO #${p.id} (RESTRINGIDO - LENTES OSCUROS)`;
+      } else if (hasMask) {
+        tagText = `[!] SUJETO #${p.id} (RESTRINGIDO - MASCARILLA)`;
+      } else if (hasCap) {
+        tagText = `[!] SUJETO #${p.id} (RESTRINGIDO - GORRA)`;
+      } else if (isCrouching) {
+        tagText = `SUJETO #${p.id} (IDENTIFICADO - PERSONAL)`;
+      }
+      const headerWidth = Math.max(p.w, tagText.length * 7 + 14);
       ctx.fillRect(p.x, p.y - 22, headerWidth, 22);
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 10px JetBrains Mono';
       ctx.fillText(tagText, p.x + 4, p.y - 6);
 
-      // 2. Sub-región Gorra / Headwear (Zona Superior)
-      const capY = p.y + 2;
-      const capH = p.h * 0.16;
-      ctx.strokeStyle = hasCap ? '#ff3355' : 'rgba(0, 244, 237, 0.4)';
-      ctx.lineWidth = hasCap ? 2 : 1;
-      ctx.setLineDash([4, 2]);
-      ctx.strokeRect(p.x + 4, capY, p.w - 8, capH);
-      ctx.setLineDash([]);
-      ctx.fillStyle = hasCap ? '#ff3355' : '#00f4ed';
-      ctx.font = '8px JetBrains Mono';
-      ctx.fillText(hasCap ? '► GORRA: DETECTADA' : '► GORRA: NO', p.x + 6, capY + 12);
+      // Si el sujeto está de pie, dibujar las sub-regiones faciales exactas (en la cabeza)
+      if (!isCrouching && p.h > 60) {
+        // La cabeza es el 16% superior del cuerpo
+        const headH = p.h * 0.16;
 
-      // 3. Sub-región Lentes / Eyewear (Zona Ojos)
-      const glassesY = p.y + p.h * 0.16;
-      const glassesH = p.h * 0.14;
-      ctx.strokeStyle = hasGlasses ? '#00f4ed' : 'rgba(156, 163, 175, 0.4)';
-      ctx.lineWidth = hasGlasses ? 2 : 1;
-      ctx.strokeRect(p.x + 4, glassesY, p.w - 8, glassesH);
-      ctx.fillStyle = hasGlasses ? '#00f4ed' : '#9ca3af';
-      ctx.font = '8px JetBrains Mono';
-      ctx.fillText(hasGlasses ? '► LENTES: VISIBLES' : '► LENTES: NO', p.x + 6, glassesY + 11);
+        // 2. Sub-región Gorra / Headwear (0% a 5% del cuerpo = 0% a 32% de la cabeza)
+        const capY = p.y + 2;
+        const capH = Math.max(6, headH * 0.32);
+        ctx.strokeStyle = hasCap ? '#ff3355' : 'rgba(0, 244, 237, 0.4)';
+        ctx.lineWidth = hasCap ? 2 : 1;
+        ctx.setLineDash([4, 2]);
+        ctx.strokeRect(p.x + 4, capY, p.w - 8, capH);
+        ctx.setLineDash([]);
+        ctx.fillStyle = hasCap ? '#ff3355' : '#00f4ed';
+        ctx.font = '8px JetBrains Mono';
+        ctx.fillText(hasCap ? '► GORRA: DETECTADA' : '► GORRA: NO', p.x + 6, capY + Math.min(capH - 2, 10));
 
-      // 4. Sub-región Mascarilla / Face Mask (Zona Boca/Mentón)
-      const maskY = p.y + p.h * 0.30;
-      const maskH = p.h * 0.16;
-      ctx.strokeStyle = hasMask ? '#ff3355' : 'rgba(156, 163, 175, 0.4)';
-      ctx.lineWidth = hasMask ? 2 : 1;
-      ctx.setLineDash([4, 2]);
-      ctx.strokeRect(p.x + 4, maskY, p.w - 8, maskH);
-      ctx.setLineDash([]);
-      ctx.fillStyle = hasMask ? '#ff3355' : '#9ca3af';
-      ctx.font = '8px JetBrains Mono';
-      ctx.fillText(hasMask ? `► MASCARILLA: ${p.maskType || 'DETECTADA'}` : '► MASCARILLA: NO', p.x + 6, maskY + 12);
+        // 3. Sub-región Lentes / Eyewear (5% a 10% del cuerpo = 30% a 60% de la cabeza)
+        const glassesY = p.y + headH * 0.30;
+        const glassesH = Math.max(8, headH * 0.32);
+        ctx.strokeStyle = (hasGlasses && isDarkGlasses) ? '#ff3355' : (hasGlasses ? '#00f4ed' : 'rgba(156, 163, 175, 0.4)');
+        ctx.lineWidth = (hasGlasses && isDarkGlasses) ? 2 : 1;
+        ctx.strokeRect(p.x + 4, glassesY, p.w - 8, glassesH);
+        ctx.fillStyle = (hasGlasses && isDarkGlasses) ? '#ff3355' : (hasGlasses ? '#00f4ed' : '#9ca3af');
+        ctx.font = '8px JetBrains Mono';
+        const glassesLabel = (hasGlasses && isDarkGlasses) ? '► LENTES OSCUROS: DETECTADOS' : (hasGlasses ? '► LENTES: VISIBLES' : '► LENTES: NO');
+        ctx.fillText(glassesLabel, p.x + 6, glassesY + Math.min(glassesH - 2, 10));
+
+        // 4. Sub-región Mascarilla / Face Mask (10% a 16% del cuerpo = 60% a 100% de la cabeza)
+        // Se detiene exactamente en el mentón antes del cuello y camiseta
+        const maskY = p.y + headH * 0.60;
+        const maskH = Math.max(8, headH * 0.38);
+        ctx.strokeStyle = hasMask ? '#ff3355' : 'rgba(156, 163, 175, 0.4)';
+        ctx.lineWidth = hasMask ? 2 : 1;
+        ctx.setLineDash([4, 2]);
+        ctx.strokeRect(p.x + 4, maskY, p.w - 8, maskH);
+        ctx.setLineDash([]);
+        ctx.fillStyle = hasMask ? '#ff3355' : '#9ca3af';
+        ctx.font = '8px JetBrains Mono';
+        ctx.fillText(hasMask ? `► MASCARILLA: ${p.maskType || 'DETECTADA'}` : '► MASCARILLA: NO', p.x + 6, maskY + Math.min(maskH - 2, 10));
+      }
 
       // 5. Panel Inferior Detallado de Clasificación
       const panelY = p.y + p.h + 6;
-      const panelW = Math.max(p.w, 180);
+      const panelW = Math.max(p.w, 190);
       ctx.fillStyle = 'rgba(16, 23, 29, 0.95)';
       ctx.fillRect(p.x, panelY, panelW, 54);
       ctx.strokeStyle = hasRestricted ? '#ff3355' : '#374e5e';
@@ -1204,20 +1249,28 @@ export class PlayerComponent implements OnInit, AfterViewInit, OnDestroy {
 
       ctx.font = '9px JetBrains Mono';
       // Lentes
-      ctx.fillStyle = hasGlasses ? '#00f4ed' : '#9ca3af';
-      ctx.fillText(hasGlasses ? '[✓] LENTES: VISIBLES' : '[X] LENTES: NO DETECTADOS', p.x + 6, panelY + 15);
+      if (hasGlasses && isDarkGlasses) {
+        ctx.fillStyle = '#ff3355';
+        ctx.fillText('[!] LENTES: OSCUROS (RESTRINGIDO)', p.x + 6, panelY + 15);
+      } else if (hasGlasses) {
+        ctx.fillStyle = '#00f4ed';
+        ctx.fillText('[✓] LENTES: VISIBLES (PERMITIDO)', p.x + 6, panelY + 15);
+      } else {
+        ctx.fillStyle = '#00ff88';
+        ctx.fillText('[✓] LENTES: NO DETECTADOS', p.x + 6, panelY + 15);
+      }
 
       // Gorra
       ctx.fillStyle = hasCap ? '#ff3355' : '#00ff88';
       ctx.fillText(hasCap ? '[!] GORRA: DETECTADA' : '[✓] GORRA: NO DETECTADA', p.x + 6, panelY + 31);
 
       // Mascarilla
-      ctx.fillStyle = hasMask ? '#ff3355' : '#9ca3af';
+      ctx.fillStyle = hasMask ? '#ff3355' : '#00ff88';
       ctx.fillText(hasMask ? `[!] MASCARILLA: ${p.maskType || 'DETECTADA'}` : '[✓] MASCARILLA: NO PRESENTE', p.x + 6, panelY + 47);
     });
 
     // Panel HUD Superior con métricas de seguridad
-    const anyRestricted = this.detectedBoxes.some(b => b.hasMask || b.hasCap);
+    const anyRestricted = this.detectedBoxes.some(b => b.hasMask || b.hasCap || (b.hasGlasses && b.isDarkGlasses));
     ctx.fillStyle = anyRestricted ? 'rgba(40, 10, 15, 0.95)' : 'rgba(16, 23, 29, 0.94)';
     ctx.fillRect(20, 50, 380, 72);
     ctx.strokeStyle = anyRestricted ? '#ff3355' : '#00f4ed';
